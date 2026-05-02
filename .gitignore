@@ -3,3 +3,4 @@ go2rtc.yaml.save
 .env
 __pycache__/
 *.pyc
+oh
