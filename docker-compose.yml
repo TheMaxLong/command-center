@@ -1,0 +1,14 @@
+services:
+  go2rtc:
+    image: alexxit/go2rtc
+    container_name: palm-command-streams
+    restart: unless-stopped
+    ports:
+      - "1984:1984"
+      - "8554:8554"
+      - "8555:8555/tcp"
+      - "8555:8555/udp"
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml
+    environment:
+      - GO2RTC_CONFIG=/config/go2rtc.yaml

@@ -1,0 +1,12 @@
+api:
+  listen: ":1984"
+  origin: "*"
+
+streams:
+  front_cam:
+    - rtsp://YOUR_EMAIL:YOUR_PASSWORD@YOUR_CAMERA_IP:554/stream1
+  doorbell:
+    - tapo://YOUR_EMAIL:YOUR_PASSWORD@YOUR_DOORBELL_IP
+
+log:
+  level: info
