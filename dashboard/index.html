@@ -359,8 +359,8 @@
 
     <div class="sb-section-label">INTERNATIONAL</div>
     <button class="city-btn" id="btn-tokyo" onclick="switchCity('tokyo')">
-      TOKYO
-      <span class="cb-sub">SHIBUYA · YOUTUBE LIVE</span>
+      TOKYO / OSAKA
+      <span class="cb-sub">SHIBUYA · KABUKICHO · FUJI</span>
     </button>
 
     <div class="sb-section-label">NEW YORK</div>
@@ -601,15 +601,22 @@ const CITIES = {
       { id: 'kitten-1', label: 'KITTEN RESCUE · BABY CAM',  loc: 'Los Angeles · Kitten Sanctuary',   embed: 'https://www.youtube.com/embed/o8YhyLb__cI?autoplay=1&mute=1&rel=0' },
       { id: 'kitten-2', label: 'KITTEN RESCUE · PLAY ROOM', loc: 'Los Angeles · Kitten Sanctuary',   embed: 'https://www.youtube.com/embed/-m_nQT62B4Y?autoplay=1&mute=1&rel=0' },
       { id: 'aquarium', label: 'AQUARIUM · LIVE CAM',       loc: 'Live Aquarium Feed',               embed: 'https://www.youtube.com/embed/DHUnz4dyb54?autoplay=1&mute=1&rel=0' },
+      { id: 'redding-eagles', label: 'REDDING EAGLES · NEST', loc: 'Redding CA · Eagle Nest Webcam',  embed: 'https://www.youtube.com/embed/mKN9DqK1MNw?autoplay=1&mute=1&rel=0' },
+      { id: 'ecuador-hummingbird', label: 'HUMMINGBIRDS · ECUADOR', loc: 'Ecuador · Sachatamia Lodge', embed: 'https://www.youtube.com/embed/c3KfiiBTIvA?autoplay=1&mute=1&rel=0' },
     ],
   },
   tokyo: {
-    name:   'TOKYO · JAPAN',
+    name:   'JAPAN',
     source: 'YOUTUBE LIVE',
-    footer: 'INTERNATIONAL: TOKYO · SHIBUYA SCRAMBLE CROSSING',
+    footer: 'INTERNATIONAL: JAPAN · SHIBUYA · KABUKICHO · OSAKA HARUKAS',
     type:   'angelcam',
     cams: [
-      { id: 'shibuya', label: 'SHIBUYA CROSSING', loc: 'Tokyo · Shibuya Scramble', type: 'angelcam', embed: 'https://www.youtube.com/embed/dfVK7ld38Ys?autoplay=1&mute=1&rel=0' },
+      { id: 'shibuya',    label: 'SHIBUYA CROSSING',     loc: 'Tokyo · Shibuya Scramble',   type: 'angelcam', embed: 'https://www.youtube.com/embed/dfVK7ld38Ys?autoplay=1&mute=1&rel=0' },
+      { id: 'kabukicho',  label: 'KABUKICHO · SHINJUKU', loc: 'Tokyo · Shinjuku Kabukicho', type: 'angelcam', embed: 'https://www.youtube.com/embed/gFRtAAmiFbE?autoplay=1&mute=1&rel=0' },
+      { id: 'osaka-harukas', label: 'ABENO HARUKAS · OSAKA', loc: 'Osaka · Abeno Harukas Night View', type: 'angelcam', embed: 'https://www.youtube.com/embed/YIjxwMxWzgE?autoplay=1&mute=1&rel=0' },
+      { id: 'mt-fuji',       label: 'MT. FUJI · 4K LIVE',   loc: 'Kawaguchiko · Fuji Panorama Ropeway', type: 'angelcam', embed: 'https://www.youtube.com/embed/Sv9hcJ3k5h4?autoplay=1&mute=1&rel=0' },
+      { id: 'dotonbori',     label: 'DOTONBORI · OSAKA',    loc: 'Osaka · Dotonbori · Glico Sign',      type: 'angelcam', embed: 'https://www.youtube.com/embed/bzn2QWfOLFY?autoplay=1&mute=1&rel=0' },
+      { id: 'awaji-monkeys', label: 'AWAJI MONKEY CENTER',  loc: 'Awajishima · Monkey Sanctuary',       type: 'angelcam', embed: 'https://www.youtube.com/embed/lsxYH2XQQCg?autoplay=1&mute=1&rel=0' },
     ],
   },
   nyc: {
