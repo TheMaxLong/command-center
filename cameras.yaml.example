@@ -1,0 +1,52 @@
+# PALM COMMAND — Camera Configuration
+# ─────────────────────────────────────────────────────────────────
+# Copy this file to cameras.yaml and set real values.
+# Environment variables are expanded: ${TAPO_IP}, ${TAPO_PASSWORD}, etc.
+# ─────────────────────────────────────────────────────────────────
+
+cameras:
+
+  # ── Front Cam via go2rtc (any camera already in go2rtc.yaml) ───
+  # Grabs a JPEG frame every 10s, runs YOLOv8 on it.
+  # No motion capture — just continuous scene awareness.
+  - id:               front_cam
+    name:             "Front Camera"
+    type:             go2rtc
+    source_name:      front_cam       # must match the stream name in go2rtc.yaml
+    go2rtc_url:       "http://go2rtc:1984"  # service name inside Docker
+    ai_interval:      10              # seconds between AI frames
+
+
+  # ── Tapo D210 Doorbell ─────────────────────────────────────────
+  - id:               doorbell
+    name:             "Front Door D210"
+    type:             tapo
+    ip:               "${TAPO_IP}"
+    password:         "${TAPO_PASSWORD}"
+    port:             8800
+    poll_interval:    3       # seconds between TCP probes
+    capture_duration: 9       # seconds of video to capture on motion
+
+
+  # ── Additional Tapo camera (D230, C310, etc.) ──────────────────
+  # - id:               backyard
+  #   name:             "Backyard"
+  #   type:             tapo
+  #   ip:               "192.168.1.102"
+  #   password:         "${TAPO_PASSWORD}"
+  #   port:             8800
+  #   poll_interval:    3
+  #   capture_duration: 9
+
+
+  # ── DIY / hobbyist RTSP camera (ESP32-CAM, Reolink, etc.) ─────
+  # Motion is detected via frame-differencing on the live stream.
+  #
+  # - id:                garage
+  #   name:              "Garage DIY"
+  #   type:              rtsp
+  #   rtsp_url:          "rtsp://192.168.1.103:554/stream"
+  #   snapshot_url:      "http://192.168.1.103/capture"  # optional HTTP snap
+  #   poll_interval:     5
+  #   capture_duration:  10
+  #   motion_threshold:  0.02    # frame-diff ratio 0.0–1.0 (default 0.02 = 2%)

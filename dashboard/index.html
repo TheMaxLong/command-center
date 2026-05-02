@@ -294,6 +294,113 @@
     }
     .rot-global-btn:hover { border-color: var(--green); color: var(--green); }
     .rot-global-btn.active { border-color: var(--yellow); color: var(--yellow); }
+
+    /* ── AI DETECTION TAGS ── */
+    #det-bar {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      padding: 5px 8px;
+      background: linear-gradient(0deg, rgba(0,0,0,0.82) 0%, transparent 100%);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      z-index: 7;
+      pointer-events: none;
+    }
+    .det-tag {
+      font-size: 7px;
+      letter-spacing: 1.5px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      font-weight: 700;
+    }
+    .det-person   { background: rgba(0,212,106,0.2);  color: var(--green);  border: 1px solid var(--green-dim); }
+    .det-car,
+    .det-truck,
+    .det-bus,
+    .det-motorcycle,
+    .det-bicycle  { background: rgba(0,184,217,0.15); color: var(--cyan);   border: 1px solid #0d3a45; }
+    .det-backpack,
+    .det-handbag,
+    .det-suitcase { background: rgba(245,196,0,0.1);  color: var(--yellow); border: 1px solid #3d3000; }
+
+    /* ── AI EVENT LOG OVERLAY ── */
+    #ai-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(7,11,15,0.92);
+      z-index: 100;
+      flex-direction: column;
+    }
+    #ai-overlay.open { display: flex; }
+    #ai-overlay-header {
+      height: 46px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      flex-shrink: 0;
+    }
+    #ai-overlay-header .title { font-size: 11px; font-weight: 700; letter-spacing: 3px; color: var(--green); }
+    #ai-close {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; letter-spacing: 1px; padding: 4px 10px;
+      border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    #ai-close:hover { border-color: var(--red); color: var(--red); }
+    #ai-tabs {
+      display: flex;
+      gap: 0;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border2);
+      flex-shrink: 0;
+    }
+    .ai-tab {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px; letter-spacing: 1.5px; padding: 8px 18px;
+      border: none; border-bottom: 2px solid transparent;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    .ai-tab.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+    #ai-body { flex: 1; overflow-y: auto; padding: 12px 20px; }
+    .ai-event-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+    }
+    .ai-event-row:last-child { border-bottom: none; }
+    .ai-ev-time  { color: var(--cyan); letter-spacing: 1px; min-width: 80px; }
+    .ai-ev-cam   { color: var(--dim);  letter-spacing: 1px; min-width: 70px; }
+    .ai-ev-tags  { flex: 1; display: flex; flex-wrap: wrap; gap: 4px; }
+    .ai-ev-snap  { width: 64px; height: 36px; object-fit: cover; border-radius: 2px; opacity: 0.8; flex-shrink: 0; }
+    /* trend heatmap */
+    #trend-grid {
+      display: grid;
+      grid-template-columns: 36px repeat(24, 1fr);
+      gap: 2px;
+      font-size: 7px;
+      margin-top: 12px;
+    }
+    .tg-label { color: var(--dim); letter-spacing: 1px; display: flex; align-items: center; }
+    .tg-cell {
+      height: 18px;
+      border-radius: 2px;
+      background: var(--border2);
+    }
+    .tg-hour-label { color: var(--dim); letter-spacing: 0; text-align: center; }
+    #trend-det-list { margin-top: 16px; }
+    .td-row { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--border2); font-size: 9px; }
+    .td-class { color: var(--text); min-width: 80px; letter-spacing: 1px; }
+    .td-bar-wrap { flex: 1; height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+    .td-bar { height: 100%; background: var(--cyan); border-radius: 3px; }
+    .td-count { color: var(--dim); min-width: 50px; text-align: right; }
   </style>
 </head>
 <body>
@@ -375,6 +482,16 @@
       <span class="cb-sub">WSDOT · COMING SOON</span>
     </button>
 
+    <div class="sb-section-label">AI INTEL</div>
+    <button class="city-btn" onclick="openAIPanel('events')">
+      EVENT LOG
+      <span class="cb-sub" id="sb-event-count">LOADING...</span>
+    </button>
+    <button class="city-btn" onclick="openAIPanel('trends')">
+      5-WEEK TRENDS
+      <span class="cb-sub">HEATMAP · SCHEDULES</span>
+    </button>
+
     <div class="sb-spacer"></div>
     <div class="sb-bottom">
       <div id="sb-source">SRC: CALTRANS D8</div>
@@ -389,11 +506,12 @@
     <div class="tile personal">
       <div class="tile-header">
         <div class="tile-label">FRONT CAM</div>
-        <div class="tile-meta">TAPO · RTSP · go2rtc</div>
+        <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
       </div>
-      <div class="tile-body">
+      <div class="tile-body" style="position:relative;">
         <iframe src="http://localhost:1984/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
         <div class="tile-badge badge-live">LIVE</div>
+        <div id="front-det-bar"></div>
       </div>
     </div>
 
@@ -415,8 +533,9 @@
           </div>
           <div id="bell-count" style="font-size:8px;letter-spacing:2px;color:var(--dim);display:none;">EVENTS: 0</div>
         </div>
-        <div id="bell-age" style="display:none;position:absolute;bottom:6px;left:8px;font-size:7px;letter-spacing:1px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:2px;z-index:6;"></div>
+        <div id="bell-age" style="display:none;position:absolute;bottom:28px;left:8px;font-size:7px;letter-spacing:1px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:2px;z-index:6;"></div>
         <div class="tile-badge" id="bell-badge" style="display:none"></div>
+        <div id="det-bar"></div>
       </div>
     </div>
 
@@ -495,6 +614,19 @@
 
   </div><!-- /#grid -->
 </div><!-- /#main -->
+
+<!-- ── AI INTEL OVERLAY ── -->
+<div id="ai-overlay">
+  <div id="ai-overlay-header">
+    <div class="title">AI INTEL · PALM COMMAND</div>
+    <button id="ai-close" onclick="closeAIPanel()">✕ CLOSE</button>
+  </div>
+  <div id="ai-tabs">
+    <button class="ai-tab active" id="tab-events" onclick="switchAITab('events')">EVENT LOG</button>
+    <button class="ai-tab" id="tab-trends" onclick="switchAITab('trends')">5-WEEK TRENDS</button>
+  </div>
+  <div id="ai-body"></div>
+</div>
 
 <!-- ── FOOTER ── -->
 <div id="footer">
@@ -624,13 +756,14 @@ const CITIES = {
   },
   nyc: {
     name:   'NEW YORK · TIMES SQUARE',
-    source: 'WORLDCAMS.TV',
-    footer: 'PUBLIC: TIMES SQUARE · MANHATTAN · WORLDCAMS.TV',
+    source: 'YOUTUBE LIVE · EARTHCAM',
+    footer: 'PUBLIC: TIMES SQUARE · MANHATTAN · YOUTUBE LIVE',
     type:   'angelcam',
     cams: [
-      { id: 'tsq-main',    label: 'TIMES SQUARE · LIVE',  loc: 'Manhattan · 42nd St & 7th Ave',       type: 'angelcam', embed: 'https://worldcams.tv/united-states/new-york/times-square' },
-      { id: 'bryant-pk',   label: 'BRYANT PARK · LIVE',   loc: 'Manhattan · 6th Ave & 42nd St',       type: 'angelcam', embed: 'https://worldcams.tv/united-states/new-york/bryant-park' },
-      { id: 'red-pandas',  label: 'TREVOR ZOO · PANDAS',  loc: 'Millbrook NY · Red Panda Habitat',    type: 'angelcam', embed: 'https://worldcams.tv/united-states/millbrook/trevor-zoo-red-pandas' },
+      { id: 'tsq-earthcam',  label: 'TIMES SQUARE · EARTHCAM',  loc: 'Manhattan · 42nd St & Broadway',    type: 'angelcam', embed: 'https://www.youtube.com/embed/kPCZESVfHoQ?autoplay=1&mute=1&rel=0' },
+      { id: 'tsq-live2',     label: 'TIMES SQUARE · CAM 2',     loc: 'Manhattan · Times Square',          type: 'angelcam', embed: 'https://www.youtube.com/embed/xKrqJq7oVBY?autoplay=1&mute=1&rel=0' },
+      { id: 'nyc-brooklyn',  label: 'BROOKLYN BRIDGE · LIVE',   loc: 'Manhattan · Brooklyn Bridge',       type: 'angelcam', embed: 'https://www.youtube.com/embed/wFGIE6NX0gI?autoplay=1&mute=1&rel=0' },
+      { id: 'nyc-5th-ave',   label: 'FIFTH AVENUE · LIVE',      loc: 'Manhattan · 5th Ave & 57th St',     type: 'angelcam', embed: 'https://www.youtube.com/embed/AdUw5RdyZxI?autoplay=1&mute=1&rel=0' },
     ],
   },
   sea: {
@@ -905,7 +1038,7 @@ function tickBellAgo() {
 
 async function refreshDoorbell() {
   try {
-    const res  = await fetch('http://localhost:8181/status');
+    const res  = await fetch('http://localhost:8181/status/doorbell');
     const data = await res.json();
     const t    = Date.now();
 
@@ -962,6 +1095,9 @@ async function refreshDoorbell() {
       document.getElementById('fs-bell').textContent = data.online ? 'ACTIVE' : `${data.events} EVT`;
       dot.className = 'dot ' + (data.online ? 'live' : 'warn');
 
+      // ── AI detections ────────────────────────────────────────
+      renderDetBar(document.getElementById('det-bar'), data.detections);
+
       tickBellAgo();
       if (!bellAgoTimer) bellAgoTimer = setInterval(tickBellAgo, 1000);
 
@@ -993,6 +1129,167 @@ async function refreshDoorbell() {
 }
 setInterval(refreshDoorbell, 10000);
 refreshDoorbell();
+
+// ── FRONT CAM AI DETECTIONS ──────────────────────────────────────
+function renderDetBar(barEl, detections) {
+  if (!barEl) return;
+  if (!detections || !detections.length) { barEl.innerHTML = ''; return; }
+  const clsMap = {
+    person: 'det-person', car: 'det-car', truck: 'det-car',
+    bus: 'det-car', motorcycle: 'det-car', bicycle: 'det-car',
+    backpack: 'det-backpack', handbag: 'det-backpack', suitcase: 'det-backpack',
+  };
+  barEl.innerHTML = detections
+    .sort((a, b) => b.confidence - a.confidence)
+    .map(d => {
+      const cls = clsMap[d.class] || 'det-person';
+      return `<span class="det-tag ${cls}">${d.class.toUpperCase()} ${Math.round(d.confidence * 100)}%</span>`;
+    }).join('');
+}
+
+async function refreshFrontCam() {
+  try {
+    const res  = await fetch('http://localhost:8181/status/front_cam');
+    const data = await res.json();
+    renderDetBar(document.getElementById('front-det-bar'), data.detections);
+    const meta = document.getElementById('front-meta');
+    if (meta && data.detections && data.detections.length) {
+      meta.textContent = 'AI · ' + data.detections.map(d =>
+        d.class.toUpperCase()).join(' · ');
+    } else if (meta) {
+      meta.textContent = 'TAPO · RTSP · go2rtc';
+    }
+  } catch { /* watcher offline — silently skip */ }
+}
+setInterval(refreshFrontCam, 12000);
+refreshFrontCam();
+
+// ── AI INTEL PANEL ───────────────────────────────────────────────
+let aiPanelOpen = false;
+let aiCurrentTab = 'events';
+
+function openAIPanel(tab) {
+  aiPanelOpen = true;
+  document.getElementById('ai-overlay').classList.add('open');
+  switchAITab(tab || 'events');
+}
+
+function closeAIPanel() {
+  aiPanelOpen = false;
+  document.getElementById('ai-overlay').classList.remove('open');
+}
+
+function switchAITab(tab) {
+  aiCurrentTab = tab;
+  document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  if (tab === 'events') loadEventLog();
+  else if (tab === 'trends') loadTrends();
+}
+
+async function loadEventLog() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
+  try {
+    const res    = await fetch('http://localhost:8181/events?limit=100');
+    const events = await res.json();
+    if (!events.length) {
+      body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO EVENTS YET</div>';
+      document.getElementById('sb-event-count').textContent = '0 EVENTS';
+      return;
+    }
+    document.getElementById('sb-event-count').textContent = events.length + ' EVENTS';
+    body.innerHTML = events.map(ev => {
+      const dt   = new Date(ev.ts * 1000);
+      const time = dt.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true});
+      const tags = (ev.tags || '').split(',').filter(Boolean).map(t => {
+        const [cls, conf] = t.split(':');
+        const cls2 = cls.trim();
+        const pct  = Math.round(parseFloat(conf || 0) * 100);
+        const clsMap = { person:'det-person', car:'det-car', truck:'det-car', bus:'det-car',
+          motorcycle:'det-car', bicycle:'det-car', backpack:'det-backpack', handbag:'det-backpack', suitcase:'det-backpack' };
+        const clsCss = clsMap[cls2] || 'det-person';
+        return `<span class="det-tag ${clsCss}">${cls2.toUpperCase()} ${pct}%</span>`;
+      }).join('');
+      const snapSrc = ev.snap_path
+        ? `http://localhost:8181/snap/${ev.camera_id}?t=${ev.ts}`
+        : '';
+      const snapEl = snapSrc
+        ? `<img class="ai-ev-snap" src="${snapSrc}" alt="">` : '';
+      return `<div class="ai-event-row">
+        <span class="ai-ev-time">${time}</span>
+        <span class="ai-ev-cam">${(ev.camera_id || '').toUpperCase()}</span>
+        <div class="ai-ev-tags">${tags || '<span style="color:var(--dim);font-size:8px">NO AI DATA</span>'}</div>
+        ${snapEl}
+      </div>`;
+    }).join('');
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function loadTrends() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
+  try {
+    const res  = await fetch('http://localhost:8181/trends?weeks=5');
+    const data = await res.json();
+
+    // Heatmap
+    const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+    const hm: Record<string, number> = {};
+    let maxCount = 1;
+    for (const row of (data.heatmap || [])) {
+      hm[`${row.day_of_week}_${row.hour}`] = row.count;
+      if (row.count > maxCount) maxCount = row.count;
+    }
+
+    let heatHtml = '<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">ACTIVITY HEATMAP · LAST 5 WEEKS</div>';
+    heatHtml += '<div id="trend-grid">';
+    // Hour labels row
+    heatHtml += '<div class="tg-label"></div>';
+    for (let h = 0; h < 24; h++)
+      heatHtml += `<div class="tg-hour-label tg-label">${h}</div>`;
+    // Day rows
+    for (let d = 0; d < 7; d++) {
+      heatHtml += `<div class="tg-label">${days[d]}</div>`;
+      for (let h = 0; h < 24; h++) {
+        const c   = hm[`${d}_${h}`] || 0;
+        const pct = Math.round((c / maxCount) * 100);
+        const alpha = (0.08 + (pct / 100) * 0.85).toFixed(2);
+        const color = pct > 60 ? `rgba(0,212,106,${alpha})`
+          : pct > 20 ? `rgba(0,184,217,${alpha})`
+          : `rgba(255,255,255,${alpha})`;
+        const title = c ? `${days[d]} ${h}:00 — ${c} events` : '';
+        heatHtml += `<div class="tg-cell" style="background:${color}" title="${title}"></div>`;
+      }
+    }
+    heatHtml += '</div>';
+
+    // Detection summary
+    let detHtml = '<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">DETECTION SUMMARY</div>';
+    detHtml += '<div id="trend-det-list">';
+    const dets = data.detections || [];
+    const maxDet = dets.length ? dets[0].count : 1;
+    if (!dets.length) {
+      detHtml += '<div style="color:var(--dim);font-size:9px;padding:8px 0;">No detections yet — data builds over time</div>';
+    } else {
+      for (const d of dets) {
+        const w = Math.round((d.count / maxDet) * 100);
+        detHtml += `<div class="td-row">
+          <span class="td-class">${d.class_name.toUpperCase()}</span>
+          <div class="td-bar-wrap"><div class="td-bar" style="width:${w}%"></div></div>
+          <span class="td-count">${d.count}x &nbsp;${Math.round(d.avg_conf*100)}%</span>
+        </div>`;
+      }
+    }
+    detHtml += '</div>';
+
+    body.innerHTML = heatHtml + detHtml;
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
 
 // ── INIT ─────────────────────────────────────────────────────────
 // Stagger starting cam indices so tiles show different cams on load

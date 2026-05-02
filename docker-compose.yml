@@ -12,3 +12,28 @@ services:
       - ./go2rtc.yaml:/config/go2rtc.yaml
     environment:
       - GO2RTC_CONFIG=/config/go2rtc.yaml
+
+  vision-watcher:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: palm-vision-watcher
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./cameras.yaml:/config/cameras.yaml:ro   # copy from cameras.yaml.example
+      - vision-data:/data                         # persistent SQLite DB
+      - cam-media:/tmp/cams                       # clips + snapshots
+    environment:
+      - TAPO_IP=${TAPO_IP}
+      - TAPO_PASSWORD=${TAPO_PASSWORD}
+      - DB_PATH=/data/events.db
+      - CAMERAS_CONFIG=/config/cameras.yaml
+      - WATCHER_PORT=8181
+      # AI_MIN_CONF=0.35       # detection confidence threshold (default 0.35)
+      # AI_MODEL=yolov8n.pt    # yolov8s.pt for slightly better accuracy
+
+volumes:
+  vision-data:
+  cam-media:
