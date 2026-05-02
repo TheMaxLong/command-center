@@ -46,6 +46,27 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_det_event ON detections(event_id);
             CREATE INDEX IF NOT EXISTS idx_det_class ON detections(class_name);
+
+            -- ── Person profiles ────────────────────────────────────────────
+            CREATE TABLE IF NOT EXISTS profiles (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                first_seen  REAL    NOT NULL,
+                last_seen   REAL    NOT NULL,
+                sightings   INTEGER NOT NULL DEFAULT 1,
+                cameras     TEXT    NOT NULL DEFAULT '[]',  -- JSON list of cam_ids
+                embedding   TEXT    NOT NULL,               -- JSON float list (rolling avg)
+                thumb       BLOB,                           -- JPEG thumbnail bytes
+                label       TEXT                            -- optional human override
+            );
+
+            CREATE TABLE IF NOT EXISTS profile_sightings (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                profile_id  INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+                ts          REAL    NOT NULL,
+                cam_id      TEXT    NOT NULL,
+                event_id    INTEGER REFERENCES events(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_ps_profile ON profile_sightings(profile_id, ts);
         """)
 
 
@@ -142,3 +163,90 @@ def get_detection_summary(
     q += "GROUP BY d.class_name ORDER BY count DESC"
     with _conn() as c:
         return [dict(r) for r in c.execute(q, params)]
+
+
+# ── Profile write ──────────────────────────────────────────────────
+
+def create_profile(
+    cam_id: str,
+    ts: float,
+    embedding: list[float],
+    thumb_bytes: Optional[bytes] = None,
+) -> int:
+    """Create a new profile for an unrecognised person. Returns new profile id."""
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO profiles (first_seen, last_seen, sightings, cameras, embedding, thumb) "
+            "VALUES (?, ?, 1, ?, ?, ?)",
+            (ts, ts, json.dumps([cam_id]), json.dumps(embedding), thumb_bytes),
+        )
+        pid = cur.lastrowid
+        c.execute(
+            "INSERT INTO profile_sightings (profile_id, ts, cam_id) VALUES (?, ?, ?)",
+            (pid, ts, cam_id),
+        )
+        return pid
+
+
+def update_profile_sighting(
+    profile_id: int,
+    ts: float,
+    cam_id: str,
+    new_embedding: list[float],
+    event_id: Optional[int] = None,
+) -> None:
+    """Record a new sighting for an existing profile and update rolling embedding."""
+    with _conn() as c:
+        row = c.execute(
+            "SELECT cameras FROM profiles WHERE id = ?", (profile_id,)
+        ).fetchone()
+        cameras: list[str] = json.loads(row["cameras"]) if row else []
+        if cam_id not in cameras:
+            cameras.append(cam_id)
+
+        c.execute(
+            "UPDATE profiles SET last_seen = ?, sightings = sightings + 1, "
+            "cameras = ?, embedding = ? WHERE id = ?",
+            (ts, json.dumps(cameras), json.dumps(new_embedding), profile_id),
+        )
+        c.execute(
+            "INSERT INTO profile_sightings (profile_id, ts, cam_id, event_id) "
+            "VALUES (?, ?, ?, ?)",
+            (profile_id, ts, cam_id, event_id),
+        )
+
+
+# ── Profile read ───────────────────────────────────────────────────
+
+def get_all_profiles() -> list[dict]:
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, first_seen, last_seen, sightings, cameras, embedding, thumb, label "
+            "FROM profiles ORDER BY last_seen DESC"
+        )]
+
+
+def get_profile(profile_id: int) -> Optional[dict]:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT id, first_seen, last_seen, sightings, cameras, embedding, thumb, label "
+            "FROM profiles WHERE id = ?", (profile_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_profile_thumb(profile_id: int) -> Optional[bytes]:
+    with _conn() as c:
+        row = c.execute(
+            "SELECT thumb FROM profiles WHERE id = ?", (profile_id,)
+        ).fetchone()
+        return row["thumb"] if row else None
+
+
+def get_profile_sightings(profile_id: int) -> list[dict]:
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT ts, cam_id, event_id FROM profile_sightings "
+            "WHERE profile_id = ? ORDER BY ts DESC",
+            (profile_id,),
+        )]

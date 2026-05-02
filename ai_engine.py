@@ -12,9 +12,10 @@ Device selection:
 """
 from __future__ import annotations
 
+import io
 import os
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 # Classes from COCO that matter for home security (id → label)
 RELEVANT_CLASSES: dict[int, str] = {
@@ -98,4 +99,94 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
 
     except Exception as e:
         print(f"[ai] detect error: {e}", flush=True)
+        return []
+
+
+# ── Bounding-box annotation ───────────────────────────────────────
+
+# Colours match the dashboard CSS variables
+_BBOX_COLORS: dict[str, str] = {
+    "person":     "#00d46a",
+    "car":        "#00b8d9",
+    "truck":      "#00b8d9",
+    "bus":        "#00b8d9",
+    "motorcycle": "#00b8d9",
+    "bicycle":    "#00b8d9",
+    "backpack":   "#f5c400",
+    "handbag":    "#f5c400",
+    "suitcase":   "#f5c400",
+}
+
+
+def annotate(
+    image_path: Union[str, Path],
+    detections: list[dict],
+) -> Optional[Path]:
+    """
+    Draw bounding boxes + confidence labels on a copy of the snapshot.
+
+    Saves  <same-dir>/snap_ann.jpg  (fixed name for easy serving).
+    Returns the output path, or None on failure / no detections.
+    """
+    if not detections:
+        return None
+    try:
+        from PIL import Image, ImageDraw
+
+        p   = Path(image_path)
+        img = Image.open(p).convert("RGB")
+        drw = ImageDraw.Draw(img)
+
+        for d in detections:
+            x1, y1, x2, y2 = d["bbox"]
+            color = _BBOX_COLORS.get(d["class"], "#ffffff")
+
+            # Bounding box (2 px border)
+            drw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+
+            # Label pill above box
+            label  = f"{d['class'].upper()} {int(d['confidence'] * 100)}%"
+            pill_w = len(label) * 7 + 6
+            pill_h = 14
+            pill_y = max(0, y1 - pill_h)
+            drw.rectangle([x1, pill_y, x1 + pill_w, pill_y + pill_h], fill=color)
+            drw.text((x1 + 3, pill_y + 1), label, fill="#000000")
+
+        out = p.parent / "snap_ann.jpg"
+        img.save(str(out), "JPEG", quality=88)
+        return out
+    except Exception as e:
+        print(f"[ai] annotate error: {e}", flush=True)
+        return None
+
+
+# ── Person crop extraction (for profiler) ────────────────────────
+
+def extract_crops(
+    image_path: Union[str, Path],
+    detections: list[dict],
+    cls_filter: str = "person",
+) -> list[bytes]:
+    """
+    Return JPEG bytes for every bounding box matching *cls_filter*.
+    Crops are resized to 64 × 128 px (standard person ReID input shape).
+    """
+    try:
+        from PIL import Image
+
+        img   = Image.open(image_path).convert("RGB")
+        crops: list[bytes] = []
+        for d in detections:
+            if d["class"] != cls_filter:
+                continue
+            x1, y1, x2, y2 = d["bbox"]
+            if x2 <= x1 or y2 <= y1:
+                continue
+            crop = img.crop((x1, y1, x2, y2)).resize((64, 128), Image.LANCZOS)
+            buf  = io.BytesIO()
+            crop.save(buf, "JPEG", quality=85)
+            crops.append(buf.getvalue())
+        return crops
+    except Exception as e:
+        print(f"[ai] extract_crops error: {e}", flush=True)
         return []

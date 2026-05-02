@@ -2,6 +2,7 @@
 pytapo>=2.0
 ultralytics>=8.0
 pyyaml>=6.0
+Pillow>=10.0        # bounding-box annotation + person crop extraction
 
 # RTSP motion detection (needed only for non-Tapo cameras)
 # comment out if you only use Tapo cameras to keep the image smaller

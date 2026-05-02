@@ -24,6 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import ai_engine
 import event_db
+import profiler
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -47,6 +48,7 @@ class CameraState:
     events:           int              = 0
     last_mode:        Optional[str]    = None
     last_detections:  list             = field(default_factory=list)
+    last_profiles:    list             = field(default_factory=list)  # profiler hits
 
 
 # Global registry filled at startup
@@ -125,7 +127,7 @@ def _run_ai_and_store(
     snap_path: Optional[str],
 ) -> None:
     """Run AI on snapshot, persist event + detections. Called in a daemon thread."""
-    detections = []
+    detections: list[dict] = []
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
 
@@ -133,7 +135,22 @@ def _run_ai_and_store(
     if detections:
         event_db.add_detections(event_id, detections)
 
-    cameras[cam_id].last_detections = detections
+    # Annotate snapshot with bounding boxes
+    if snap_path and detections:
+        ai_engine.annotate(snap_path, detections)
+
+    # Person profiling
+    profile_ids: list[int] = []
+    if snap_path and detections:
+        crops = ai_engine.extract_crops(snap_path, detections)
+        profile_ids = profiler.match_or_create(cam_id, event_ts, crops, event_id)
+
+    state = cameras[cam_id]
+    state.last_detections = detections
+    state.last_profiles   = [
+        {"id": pid, "label": profiler.get_profile_label(pid)}
+        for pid in profile_ids
+    ]
 
     if detections:
         tags = ", ".join(
@@ -284,7 +301,22 @@ async def go2rtc_poll_loop(cam_cfg: dict) -> None:
             state.last_seen = time.time()
 
             detections = ai_engine.detect(snap)
+
+            # Annotate snapshot with bounding boxes
+            if detections:
+                ai_engine.annotate(snap, detections)
+
+            # Person profiling
+            profile_ids: list[int] = []
+            if detections:
+                crops = ai_engine.extract_crops(snap, detections)
+                profile_ids = profiler.match_or_create(cam_id, state.last_seen or event_ts, crops)
+
             state.last_detections = detections
+            state.last_profiles   = [
+                {"id": pid, "label": profiler.get_profile_label(pid)}
+                for pid in profile_ids
+            ]
 
             if detections:
                 tags = ", ".join(
@@ -418,15 +450,45 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(self._cam_status(cam_id))
 
-        # /clip/<cam_id>  or  /snap/<cam_id>
-        elif parts[0] in ("clip", "snap") and len(parts) == 2:
+        # /clip/<cam_id>  or  /snap/<cam_id>  or  /snap_ann/<cam_id>
+        elif parts[0] in ("clip", "snap", "snap_ann") and len(parts) == 2:
             cam_id = parts[1]
             kind   = parts[0]
             if cam_id not in cameras:
                 self._not_found()
                 return
-            mime = "video/mp4" if kind == "clip" else "image/jpeg"
-            self._serve_file(media_path(cam_id, kind), mime)
+            if kind == "clip":
+                mime = "video/mp4"
+                path = media_path(cam_id, "clip")
+            elif kind == "snap_ann":
+                mime = "image/jpeg"
+                path = media_path(cam_id, "snap").parent / "snap_ann.jpg"
+            else:
+                mime = "image/jpeg"
+                path = media_path(cam_id, "snap")
+            self._serve_file(path, mime)
+
+        # /profiles
+        elif p == "/profiles":
+            self._json(profiler.profiles_summary())
+
+        # /thumb/<profile_id>
+        elif parts[0] == "thumb" and len(parts) == 2:
+            try:
+                pid   = int(parts[1])
+                thumb = event_db.get_profile_thumb(pid)
+            except (ValueError, Exception):
+                thumb = None
+            if not thumb:
+                self._not_found()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(thumb)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(thumb)
 
         # /events[?camera=&limit=]
         elif p == "/events":
@@ -447,20 +509,23 @@ class Handler(BaseHTTPRequestHandler):
             self._not_found()
 
     def _cam_status(self, cam_id: str) -> dict:
-        s    = cameras[cam_id]
-        clip = media_path(cam_id, "clip")
-        snap = media_path(cam_id, "snap")
-        age  = int(time.time() - s.last_seen) if s.last_seen else None
+        s       = cameras[cam_id]
+        clip    = media_path(cam_id, "clip")
+        snap    = media_path(cam_id, "snap")
+        snap_ann = snap.parent / "snap_ann.jpg"
+        age     = int(time.time() - s.last_seen) if s.last_seen else None
         return {
-            "online":       s.online,
-            "last_seen":    datetime.fromtimestamp(s.last_seen).isoformat() if s.last_seen else None,
-            "last_seen_ts": s.last_seen,
-            "age_s":        age,
-            "events":       s.events,
-            "last_mode":    s.last_mode,
-            "has_clip":     clip.exists() and clip.stat().st_size > 10_000,
-            "has_snap":     snap.exists() and snap.stat().st_size > 0,
-            "detections":   s.last_detections,
+            "online":        s.online,
+            "last_seen":     datetime.fromtimestamp(s.last_seen).isoformat() if s.last_seen else None,
+            "last_seen_ts":  s.last_seen,
+            "age_s":         age,
+            "events":        s.events,
+            "last_mode":     s.last_mode,
+            "has_clip":      clip.exists() and clip.stat().st_size > 10_000,
+            "has_snap":      snap.exists() and snap.stat().st_size > 0,
+            "has_snap_ann":  snap_ann.exists() and snap_ann.stat().st_size > 0,
+            "detections":    s.last_detections,
+            "profiles":      s.last_profiles,
         }
 
     def _json(self, data: object) -> None:
