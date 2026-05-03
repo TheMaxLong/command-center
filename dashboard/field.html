@@ -524,7 +524,12 @@
 
       <div class="cam-controls">
         <button class="btn-sm" onclick="startCamera()">⟳ Restart Cam</button>
+        <button class="btn-sm" onclick="document.getElementById('uploadPlate').click()">📁 Plate from Gallery</button>
+        <button class="btn-sm" onclick="document.getElementById('uploadFace').click()">📁 Face from Gallery</button>
       </div>
+
+      <input type="file" id="uploadPlate" accept="image/*" style="display:none" onchange="scanFromFile(event,'plate')">
+      <input type="file" id="uploadFace"  accept="image/*" style="display:none" onchange="scanFromFile(event,'face')"  capture="environment">
 
     </div>
   </div>
@@ -645,6 +650,32 @@ async function doScan(type) {
 function setButtonsDisabled(v) {
   document.getElementById('btnPlate').disabled = v;
   document.getElementById('btnFace').disabled  = v;
+}
+
+async function scanFromFile(event, type) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file) return;
+  if (scanning) return;
+  scanning = true;
+  currentScanType = type;
+  hideError();
+  openResultCard(type, null);
+
+  const fd = new FormData();
+  fd.append('image', file, file.name);
+  try {
+    const endpoint = type === 'plate' ? '/api/scan/plate' : '/api/scan/face';
+    const res = await fetch(endpoint, { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    renderResult(type, data);
+    if (type === 'plate') loadHistory();
+  } catch (e) {
+    renderError(e.message);
+  } finally {
+    scanning = false;
+  }
 }
 
 // ── Result card ────────────────────────────────────────────────────────────
