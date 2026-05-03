@@ -32,6 +32,7 @@ import event_db
 import profiler
 import trend_analyzer
 import intel_engine
+import query_agent
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -136,6 +137,11 @@ def _run_ai_and_store(
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
 
+    # ── Person tracking: enrich detections with track_id, direction, dwell_s
+    if detections:
+        tracker   = ai_engine.get_tracker(cam_id)
+        detections = tracker.update(detections, event_ts)
+
     event_id = event_db.insert_event(cam_id, event_ts, clip_path, snap_path)
     if detections:
         event_db.add_detections(event_id, detections)
@@ -151,8 +157,8 @@ def _run_ai_and_store(
         profile_ids = profiler.match_or_create(cam_id, event_ts, crops, event_id)
         profile_objs = [
             {
-                "id":    pid,
-                "label": profiler.get_profile_label(pid),
+                "id":        pid,
+                "label":     profiler.get_profile_label(pid),
                 "is_regular": profiler.get_profile_label(pid).startswith("REGULAR"),
             }
             for pid in profile_ids
@@ -535,10 +541,31 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._not_found()
 
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        p      = parsed.path.rstrip("/")
+
+        # POST /agent/query  {"text": "...", "camera": "..."}
+        if p == "/agent/query":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data   = json.loads(body)
+                text   = str(data.get("text", "")).strip()[:512]
+                camera = data.get("camera") or None
+            except Exception:
+                self.send_response(400); self.end_headers(); return
+            if not text:
+                self._json({"error": "empty query"}); return
+            result = query_agent.query(text, camera)
+            self._json(result)
+        else:
+            self._not_found()
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 

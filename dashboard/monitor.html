@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PALM COMMAND · MONITOR</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:    #030608;
+      --panel: #090e14;
+      --green: #00d46a; --green-dim: #003d20;
+      --cyan:  #00b8d9; --red: #ff3b3b;
+      --yellow:#f5c400; --dim: #3d5166;
+      --text:  #c0ccd8; --border: #1a3352; --border2: #0f2238;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text);
+      font-family: 'JetBrains Mono', 'Courier New', monospace;
+      font-size: 11px; overflow: hidden; }
+
+    /* ── HEADER ── */
+    #hdr {
+      height: 38px; background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; flex-shrink: 0; position: relative;
+    }
+    .hdr-logo { font-size: 12px; font-weight: 700; letter-spacing: 4px; color: var(--green);
+      text-shadow: 0 0 14px rgba(0,212,106,0.5); }
+    .hdr-sub  { font-size: 7px; color: var(--dim); letter-spacing: 2px; margin-top: 1px; }
+    .hdr-status { display: flex; gap: 16px; align-items: center; font-size: 8px; letter-spacing: 1px; color: var(--dim); }
+    .pill { display: flex; align-items: center; gap: 5px; }
+    .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+    .dot.live { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+    .dot.warn { background: var(--yellow); }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .scan-line { position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+      background: linear-gradient(90deg,transparent,var(--green),transparent);
+      animation: scan 3s linear infinite; opacity: 0.4; }
+    @keyframes scan { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
+    #hdr-clock { font-size: 14px; letter-spacing: 3px; color: var(--text); font-weight: 300; }
+    .back-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer; text-decoration: none;
+    }
+    .back-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+
+    /* ── LAYOUT ── */
+    #body { display: flex; height: calc(100vh - 38px); }
+
+    /* ── LEFT: CAMERA FEED ── */
+    #feed-wrap {
+      flex: 1; position: relative; background: #000;
+      border-right: 1px solid var(--border2);
+    }
+    #feed-canvas {
+      position: absolute; inset: 0; width: 100%; height: 100%; z-index: 5;
+      pointer-events: none;
+    }
+    #feed-img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    #feed-go2rtc { width: 100%; height: 100%; border: none; display: block; }
+
+    /* CRT scanlines */
+    #feed-wrap::after {
+      content: ''; position: absolute; inset: 0;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.06) 2px,rgba(0,0,0,0.06) 4px);
+      pointer-events: none; z-index: 6;
+    }
+
+    /* Overlay badge bar */
+    #overlay-bar {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 8;
+      background: linear-gradient(0deg, rgba(0,0,0,0.88) 0%, transparent 100%);
+      padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    .det-badge {
+      font-size: 8px; letter-spacing: 1.5px; padding: 3px 8px;
+      border-radius: 2px; font-weight: 700;
+    }
+    .badge-person { background: rgba(0,212,106,0.2); color: var(--green); border: 1px solid var(--green-dim); }
+    .badge-vehicle { background: rgba(0,184,217,0.15); color: var(--cyan); border: 1px solid #0d3a45; }
+    .badge-object  { background: rgba(245,196,0,0.1);  color: var(--yellow); border: 1px solid #3d3000; }
+    .badge-direction {
+      font-size: 7px; padding: 2px 6px; border-radius: 2px; letter-spacing: 1px;
+    }
+    .dir-approaching { background: rgba(255,59,59,0.15); color: var(--red); border: 1px solid #5a0000; }
+    .dir-departing   { background: rgba(0,184,217,0.1);  color: var(--cyan); border: 1px solid #0d3a45; }
+    .dir-stationary  { background: rgba(245,196,0,0.08); color: var(--yellow); border: 1px solid #3d3000; }
+
+    /* Person count overlay */
+    #person-count-overlay {
+      position: absolute; top: 12px; left: 12px; z-index: 8;
+      background: rgba(0,0,0,0.7); border: 1px solid var(--green-dim);
+      border-radius: 3px; padding: 8px 12px; min-width: 56px;
+    }
+    #person-count-num {
+      font-size: 36px; font-weight: 700; color: var(--green); line-height: 1;
+      text-shadow: 0 0 20px rgba(0,212,106,0.7);
+    }
+    #person-count-label { font-size: 7px; letter-spacing: 2px; color: var(--dim); margin-top: 2px; }
+
+    /* Recording indicator */
+    #rec-indicator {
+      position: absolute; top: 12px; right: 12px; z-index: 8;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 8px; letter-spacing: 2px; color: var(--red);
+    }
+    #rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red);
+      box-shadow: 0 0 8px var(--red); animation: pulse 1.2s infinite; }
+
+    /* ── RIGHT PANEL ── */
+    #right-panel {
+      width: 300px; min-width: 300px; display: flex; flex-direction: column;
+      background: var(--panel); overflow: hidden;
+    }
+
+    .panel-section {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border2);
+      flex-shrink: 0;
+    }
+    .section-label {
+      font-size: 7px; letter-spacing: 2px; color: var(--cyan);
+      margin-bottom: 8px; display: flex; justify-content: space-between;
+      align-items: center;
+    }
+    .section-count { color: var(--dim); }
+
+    /* Tracking cards */
+    .track-card {
+      padding: 7px 0; border-bottom: 1px solid var(--border2);
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .track-card:last-child { border-bottom: none; }
+    .track-id {
+      width: 32px; height: 32px; border-radius: 2px;
+      background: var(--green-dim); border: 1px solid var(--green-dim);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: var(--green); flex-shrink: 0;
+    }
+    .track-info { flex: 1; min-width: 0; }
+    .track-label { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; color: var(--text); }
+    .track-meta  { font-size: 8px; color: var(--dim); letter-spacing: 1px; line-height: 1.7; margin-top: 2px; }
+    .track-dir   { font-size: 7px; letter-spacing: 1px; padding: 1px 5px; border-radius: 2px; display: inline-block; margin-top: 3px; }
+
+    /* Event log */
+    #event-log-panel { flex: 1; overflow-y: auto; padding: 0; }
+    .ev-row {
+      display: flex; gap: 8px; padding: 6px 14px; align-items: flex-start;
+      border-bottom: 1px solid var(--border2); font-size: 8px;
+    }
+    .ev-time { color: var(--cyan); min-width: 44px; letter-spacing: 0.5px; flex-shrink: 0; }
+    .ev-tags { flex: 1; color: var(--dim); letter-spacing: 0.5px; }
+    .ev-snap { width: 48px; height: 27px; object-fit: cover; border-radius: 1px; opacity: 0.7; flex-shrink: 0; }
+
+    /* Mode selector */
+    .mode-btns { display: flex; gap: 4px; }
+    .mode-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 7px; letter-spacing: 1px;
+      padding: 3px 8px; border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    .mode-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(0,184,217,0.06); }
+    .mode-btn:hover:not(.active) { border-color: var(--text); color: var(--text); }
+
+    /* Camera selector */
+    #cam-select {
+      font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px;
+      background: rgba(0,0,0,0.4); border: 1px solid var(--border); color: var(--text);
+      padding: 3px 6px; border-radius: 2px; width: 100%;
+    }
+    #cam-select:focus { outline: none; border-color: var(--cyan); }
+
+    /* Status bar at bottom of right panel */
+    #status-bar {
+      padding: 8px 14px; border-top: 1px solid var(--border2);
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 8px; flex-shrink: 0;
+    }
+    .sb-stat { color: var(--dim); letter-spacing: 1px; }
+    .sb-stat span { color: var(--text); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<div id="hdr">
+  <div>
+    <div class="hdr-logo">PALM COMMAND</div>
+    <div class="hdr-sub">DEDICATED MONITOR</div>
+  </div>
+  <div id="hdr-clock">--:--:--</div>
+  <div class="hdr-status">
+    <div class="pill"><div class="dot live" id="dot-status"></div><span id="status-label">CONNECTING</span></div>
+    <div class="pill"><div class="dot" id="dot-ai" style="background:var(--yellow)"></div>AI ACTIVE</div>
+    <a class="back-btn" href="/">← COMMAND</a>
+  </div>
+  <div class="scan-line"></div>
+</div>
+
+<div id="body">
+
+  <!-- ── FEED ── -->
+  <div id="feed-wrap">
+    <canvas id="feed-canvas"></canvas>
+    <img id="feed-img" alt="">
+    <iframe id="feed-go2rtc" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+
+    <!-- Person count -->
+    <div id="person-count-overlay" style="display:none">
+      <div id="person-count-num">0</div>
+      <div id="person-count-label">PERSONS</div>
+    </div>
+
+    <!-- REC indicator -->
+    <div id="rec-indicator" style="display:none">
+      <div id="rec-dot"></div>MONITORING
+    </div>
+
+    <!-- Detection badges -->
+    <div id="overlay-bar"></div>
+  </div>
+
+  <!-- ── RIGHT PANEL ── -->
+  <div id="right-panel">
+
+    <!-- Camera selector -->
+    <div class="panel-section">
+      <div class="section-label">CAMERA SELECT</div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <select id="cam-select" onchange="switchCamera(this.value)">
+          <option value="doorbell">DOORBELL · D210</option>
+          <option value="front_cam">FRONT CAM</option>
+        </select>
+      </div>
+      <div style="margin-top:8px;">
+        <div class="mode-btns">
+          <button class="mode-btn active" onclick="setMode('snap')" id="mode-snap">SNAP</button>
+          <button class="mode-btn" onclick="setMode('ann')" id="mode-ann">AI ANN</button>
+          <button class="mode-btn" onclick="setMode('go2rtc')" id="mode-rtc">GO2RTC</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live tracking -->
+    <div class="panel-section" style="max-height:220px;overflow-y:auto;">
+      <div class="section-label">
+        ACTIVE TRACKS
+        <span class="section-count" id="track-count">0</span>
+      </div>
+      <div id="track-list"></div>
+    </div>
+
+    <!-- Scene summary -->
+    <div class="panel-section">
+      <div class="section-label">SCENE</div>
+      <div id="scene-text" style="font-size:9px;color:var(--dim);letter-spacing:1px;line-height:1.7;">
+        Awaiting signal...
+      </div>
+    </div>
+
+    <!-- Event log -->
+    <div class="panel-section" style="padding-bottom:4px;flex-shrink:0">
+      <div class="section-label">
+        EVENT LOG
+        <span class="section-count" id="ev-count">—</span>
+      </div>
+    </div>
+    <div id="event-log-panel"></div>
+
+    <!-- Status bar -->
+    <div id="status-bar">
+      <div class="sb-stat">REFRESH <span id="sb-refresh">2s</span></div>
+      <div class="sb-stat">EVENTS <span id="sb-events">—</span></div>
+      <div class="sb-stat">UPTIME <span id="sb-uptime">—</span></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const params   = new URLSearchParams(location.search);
+let activeCam  = params.get('cam') || 'doorbell';
+let activeMode = 'snap';   // snap | ann | go2rtc
+let refreshMs  = 2000;
+let refreshTimer = null;
+let uptimeStart  = Date.now();
+let lastStatus   = null;
+
+// ── Clock ────────────────────────────────────────────────────────
+function tick() {
+  const now  = new Date();
+  const pad  = n => String(n).padStart(2, '0');
+  document.getElementById('hdr-clock').textContent =
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const elapsed = Math.floor((Date.now() - uptimeStart) / 1000);
+  const h = Math.floor(elapsed / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = elapsed % 60;
+  document.getElementById('sb-uptime').textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+setInterval(tick, 1000); tick();
+
+// ── Camera / Mode switching ───────────────────────────────────────
+function switchCamera(camId) {
+  activeCam = camId;
+  document.getElementById('feed-go2rtc').src = '';
+  startFeed();
+  refreshStatus();
+  loadEvents();
+}
+
+function setMode(mode) {
+  activeMode = mode;
+  ['snap','ann','rtc'].forEach(m => document.getElementById('mode-' + m).classList.remove('active'));
+  const map = {snap:'mode-snap', ann:'mode-ann', go2rtc:'mode-rtc'};
+  document.getElementById(map[mode] || 'mode-snap').classList.add('active');
+  startFeed();
+}
+
+function startFeed() {
+  const img  = document.getElementById('feed-img');
+  const rtc  = document.getElementById('feed-go2rtc');
+  if (activeMode === 'go2rtc') {
+    img.style.display = 'none';
+    rtc.style.display = 'block';
+    rtc.src = `/go2rtc/stream.html?src=${activeCam}&mode=mse,webrtc`;
+    stopRefresh();
+  } else {
+    rtc.style.display  = 'none';
+    img.style.display  = 'block';
+    rtc.src = '';
+    startRefresh();
+  }
+}
+
+// ── JPEG snapshot refresh ─────────────────────────────────────────
+function stopRefresh() { if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; } }
+function startRefresh() {
+  stopRefresh();
+  doSnap();
+  refreshTimer = setInterval(doSnap, refreshMs);
+}
+
+function doSnap() {
+  const img  = document.getElementById('feed-img');
+  const base = activeMode === 'ann' ? 'snap_ann' : 'snap';
+  const url  = `/api/${base}/${activeCam}?t=${Date.now()}`;
+  img.src = url;
+}
+
+// ── Status / detection polling ────────────────────────────────────
+async function refreshStatus() {
+  try {
+    const res = await fetch(`/api/status/${activeCam}`);
+    if (!res.ok) { setOffline(); return; }
+    const d = await res.json();
+    lastStatus = d;
+
+    document.getElementById('dot-status').className = 'dot ' + (d.online ? 'live' : '');
+    document.getElementById('status-label').textContent = d.online ? 'ONLINE' : 'STANDBY';
+    document.getElementById('rec-indicator').style.display = d.online ? 'flex' : 'none';
+
+    // Scene summary
+    if (d.summary) {
+      document.getElementById('scene-text').textContent = d.summary;
+      document.getElementById('scene-text').style.color = 'var(--cyan)';
+    } else {
+      document.getElementById('scene-text').textContent = 'No activity.';
+      document.getElementById('scene-text').style.color = 'var(--dim)';
+    }
+
+    // Detections
+    const dets = d.detections || [];
+    renderDetBadges(dets);
+    renderTracks(dets, d.profiles || []);
+    drawBboxCanvas(dets);
+
+  } catch { setOffline(); }
+}
+
+function setOffline() {
+  document.getElementById('dot-status').className = 'dot';
+  document.getElementById('status-label').textContent = 'OFFLINE';
+  document.getElementById('rec-indicator').style.display = 'none';
+}
+
+// ── Detection badges in overlay bar ──────────────────────────────
+function renderDetBadges(dets) {
+  const bar = document.getElementById('overlay-bar');
+  if (!dets || dets.length === 0) { bar.innerHTML = ''; return; }
+
+  const byClass = {};
+  dets.forEach(d => {
+    if (!byClass[d.class]) byClass[d.class] = [];
+    byClass[d.class].push(d);
+  });
+
+  let html = '';
+  const persons = byClass['person'] || [];
+  if (persons.length) {
+    const pco = document.getElementById('person-count-overlay');
+    pco.style.display = 'block';
+    document.getElementById('person-count-num').textContent = persons.length;
+    html += `<span class="det-badge badge-person">PERSON ×${persons.length}</span>`;
+    // Direction badges
+    const dirs = [...new Set(persons.map(p => p.direction).filter(Boolean))];
+    dirs.forEach(dir => {
+      if (dir && dir !== 'UNKNOWN') {
+        const cls = 'dir-' + dir.toLowerCase();
+        const arrow = dir === 'APPROACHING' ? '→' : dir === 'DEPARTING' ? '←' : '◉';
+        html += `<span class="det-badge badge-direction ${cls}">${arrow} ${dir}</span>`;
+      }
+    });
+    // Dwell time
+    const maxDwell = Math.max(...persons.map(p => p.dwell_s || 0));
+    if (maxDwell > 5) {
+      html += `<span class="det-badge badge-direction dir-stationary">⏱ ${Math.round(maxDwell)}s</span>`;
+    }
+  } else {
+    document.getElementById('person-count-overlay').style.display = 'none';
+  }
+
+  const vehicles = ['car','truck','motorcycle','bus','bicycle'];
+  vehicles.forEach(cls => {
+    if (byClass[cls]) html += `<span class="det-badge badge-vehicle">${cls.toUpperCase()} ×${byClass[cls].length}</span>`;
+  });
+  ['dog','cat','bird'].forEach(cls => {
+    if (byClass[cls]) html += `<span class="det-badge badge-person" style="color:var(--yellow);border-color:#3d3000;background:rgba(245,196,0,0.1)">${cls.toUpperCase()}</span>`;
+  });
+  bar.innerHTML = html;
+}
+
+// ── Active tracks panel ───────────────────────────────────────────
+function renderTracks(dets, profiles) {
+  const persons = (dets || []).filter(d => d.class === 'person');
+  document.getElementById('track-count').textContent = persons.length;
+
+  if (persons.length === 0) {
+    document.getElementById('track-list').innerHTML =
+      '<div style="color:var(--dim);font-size:8px;letter-spacing:1px;padding:4px 0;">No active tracks</div>';
+    return;
+  }
+
+  let html = '';
+  persons.forEach((p, i) => {
+    const prof    = profiles[i];
+    const label   = prof ? prof.label : `TRACK-${(p.track_id || (i+1)).toString().padStart(3,'0')}`;
+    const isReg   = prof && prof.is_regular;
+    const dir     = p.direction || 'UNKNOWN';
+    const dwell   = p.dwell_s || 0;
+    const dirCls  = dir === 'APPROACHING' ? 'dir-approaching' : dir === 'DEPARTING' ? 'dir-departing' : dir === 'STATIONARY' ? 'dir-stationary' : '';
+    const dirArrow= dir === 'APPROACHING' ? '→ APPROACHING' : dir === 'DEPARTING' ? '← DEPARTING' : dir === 'STATIONARY' ? '◉ STATIONARY' : '· UNKNOWN';
+    const conf    = Math.round((p.confidence || 0) * 100);
+    const color   = isReg ? 'var(--green)' : 'var(--yellow)';
+    html += `
+    <div class="track-card">
+      <div class="track-id" style="border-color:${color};background:${isReg ? 'rgba(0,212,106,0.08)' : 'rgba(245,196,0,0.06)'};color:${color}">
+        ${i+1}
+      </div>
+      <div class="track-info">
+        <div class="track-label" style="color:${color}">${label}</div>
+        <div class="track-meta">
+          CONF: ${conf}%<br>
+          DWELL: ${dwell < 60 ? dwell + 's' : Math.floor(dwell/60) + 'm ' + (dwell%60) + 's'}
+        </div>
+        ${dir !== 'UNKNOWN' ? `<span class="track-dir det-badge ${dirCls}" style="font-size:7px;">${dirArrow}</span>` : ''}
+      </div>
+    </div>`;
+  });
+  document.getElementById('track-list').innerHTML = html;
+}
+
+// ── Canvas bounding box overlay ───────────────────────────────────
+function drawBboxCanvas(dets) {
+  const canvas = document.getElementById('feed-canvas');
+  const img    = document.getElementById('feed-img');
+  const ctx    = canvas.getContext('2d');
+  canvas.width  = img.clientWidth  || canvas.clientWidth;
+  canvas.height = img.clientHeight || canvas.clientHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (!dets || activeMode === 'go2rtc') return;
+
+  const persons = dets.filter(d => d.class === 'person');
+  if (!persons.length) return;
+
+  // Scale factor: detections are in original image coordinates
+  const scaleX = persons[0].frame_w ? canvas.width  / persons[0].frame_w : 1;
+  const scaleY = persons[0].frame_h ? canvas.height / persons[0].frame_h : 1;
+
+  persons.forEach((p, i) => {
+    const [x1, y1, x2, y2] = p.bbox || [0,0,0,0];
+    const sx1 = x1 * scaleX; const sy1 = y1 * scaleY;
+    const sw  = (x2 - x1) * scaleX; const sh  = (y2 - y1) * scaleY;
+
+    const isApproach = p.direction === 'APPROACHING';
+    const isDeparting = p.direction === 'DEPARTING';
+    const color = isApproach ? '#ff3b3b' : isDeparting ? '#00b8d9' : '#00d46a';
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1.5;
+    ctx.globalAlpha = 0.85;
+
+    // Tactical corner brackets instead of full box
+    const cs = Math.min(sw, sh) * 0.18; // corner size
+    ctx.beginPath();
+    // top-left
+    ctx.moveTo(sx1, sy1 + cs); ctx.lineTo(sx1, sy1); ctx.lineTo(sx1 + cs, sy1);
+    // top-right
+    ctx.moveTo(sx1 + sw - cs, sy1); ctx.lineTo(sx1 + sw, sy1); ctx.lineTo(sx1 + sw, sy1 + cs);
+    // bottom-left
+    ctx.moveTo(sx1, sy1 + sh - cs); ctx.lineTo(sx1, sy1 + sh); ctx.lineTo(sx1 + cs, sy1 + sh);
+    // bottom-right
+    ctx.moveTo(sx1 + sw - cs, sy1 + sh); ctx.lineTo(sx1 + sw, sy1 + sh); ctx.lineTo(sx1 + sw, sy1 + sh - cs);
+    ctx.stroke();
+
+    // Label
+    ctx.globalAlpha = 1;
+    ctx.fillStyle   = color;
+    ctx.font        = 'bold 9px JetBrains Mono, monospace';
+    const conf      = Math.round((p.confidence || 0) * 100);
+    const dir       = p.direction && p.direction !== 'UNKNOWN' ? ` · ${p.direction}` : '';
+    ctx.fillText(`[${i+1}] ${conf}%${dir}`, sx1 + 2, sy1 - 4);
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── Event log ─────────────────────────────────────────────────────
+async function loadEvents() {
+  try {
+    const res = await fetch(`/api/events?camera=${activeCam}&limit=30`);
+    if (!res.ok) return;
+    const events = await res.json();
+    document.getElementById('ev-count').textContent = events.length;
+    document.getElementById('sb-events').textContent = events.length;
+
+    const log = document.getElementById('event-log-panel');
+    if (!events.length) {
+      log.innerHTML = '<div style="color:var(--dim);font-size:8px;letter-spacing:1px;padding:8px 14px;">No events recorded</div>';
+      return;
+    }
+
+    log.innerHTML = events.map(ev => {
+      const dt = new Date(ev.ts * 1000);
+      const time = dt.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      const tags = (ev.tags || '').replace(/,/g, ' ·') || '—';
+      const snap = ev.snap_path ? `<img class="ev-snap" src="/api/snap/${activeCam}?t=${Math.floor(ev.ts)}" loading="lazy">` : '';
+      return `<div class="ev-row">
+        <span class="ev-time">${time}</span>
+        <span class="ev-tags">${tags}</span>
+        ${snap}
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
+// ── Init ──────────────────────────────────────────────────────────
+document.getElementById('cam-select').value = activeCam;
+startFeed();
+refreshStatus();
+loadEvents();
+setInterval(refreshStatus, 3000);
+setInterval(loadEvents, 15000);
+</script>
+</body>
+</html>

@@ -102,11 +102,18 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
     Run detection on an image file.
 
     Returns ALL instances above their per-class threshold:
-        [{"class": str, "confidence": float, "bbox": [x1,y1,x2,y2], "instance": int}, ...]
+        [{
+            "class": str, "confidence": float,
+            "bbox": [x1,y1,x2,y2], "instance": int,
+            "cx": int, "cy": int,           # bbox center
+            "area": int,                    # bbox pixel area
+            "frame_w": int, "frame_h": int  # image dimensions
+        }, ...]
 
     Unlike v1, multiple people in the same frame are all returned.
     """
     try:
+        from PIL import Image as _PilImage
         model   = _load_model()
         results = model.predict(
             str(image_path),
@@ -115,11 +122,17 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
             conf=MIN_CONFIDENCE,
         )
 
+        # Get image dimensions for spatial context
+        try:
+            with _PilImage.open(image_path) as _img:
+                frame_w, frame_h = _img.size
+        except Exception:
+            frame_w, frame_h = 1920, 1080
+
         detections: list[dict] = []
         class_counts: dict[str, int] = {}
 
         for r in results:
-            # Sort by confidence desc so instance numbering is highest-conf first
             boxes = sorted(r.boxes, key=lambda b: float(b.conf[0]), reverse=True)
             for box in boxes:
                 cls_id = int(box.cls[0])
@@ -128,7 +141,6 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
                 cls_name = RELEVANT_CLASSES[cls_id]
                 conf     = float(box.conf[0])
 
-                # Per-class threshold check
                 if conf < CLASS_CONFIDENCE.get(cls_name, MIN_CONFIDENCE):
                     continue
 
@@ -136,11 +148,20 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
                 instance = class_counts.get(cls_name, 0)
                 class_counts[cls_name] = instance + 1
 
+                cx   = (x1 + x2) // 2
+                cy   = (y1 + y2) // 2
+                area = (x2 - x1) * (y2 - y1)
+
                 detections.append({
                     "class":      cls_name,
                     "confidence": round(conf, 3),
                     "bbox":       [x1, y1, x2, y2],
-                    "instance":   instance,   # 0 = highest-conf of this class
+                    "instance":   instance,
+                    "cx":         cx,
+                    "cy":         cy,
+                    "area":       area,
+                    "frame_w":    frame_w,
+                    "frame_h":    frame_h,
                 })
 
         return detections
@@ -148,6 +169,144 @@ def detect(image_path: Union[str, Path]) -> list[dict]:
     except Exception as e:
         print(f"[ai] detect error: {e}", flush=True)
         return []
+
+
+# ── Per-camera person tracker ─────────────────────────────────────
+
+class PersonTracker:
+    """
+    Lightweight frame-to-frame person tracker using IoU matching.
+
+    Maintains persistent track IDs across detections, computes:
+      - direction: APPROACHING / DEPARTING / STATIONARY / UNKNOWN
+      - dwell_s:   seconds the track has been visible
+      - track_id:  stable integer ID for this physical person
+
+    One PersonTracker instance per camera. Thread-safe via the
+    camera_watcher module-level lock (not internal).
+    """
+
+    # IoU threshold to link detection across frames
+    IOU_THRESH  = 0.25
+    # Area growth to call something "approaching" (>15% larger = approaching)
+    APPROACH_THRESH = 0.15
+    # Tracks expire after this many seconds without a match
+    EXPIRE_S    = 30.0
+
+    def __init__(self, cam_id: str):
+        self.cam_id = cam_id
+        # active_tracks: {track_id: {"bbox", "area", "cx", "cy", "first_ts", "last_ts", "direction", "history_area"}}
+        self._tracks: dict[int, dict] = {}
+        self._next_id = 1
+
+    @staticmethod
+    def _iou(a: list[int], b: list[int]) -> float:
+        ax1, ay1, ax2, ay2 = a
+        bx1, by1, bx2, by2 = b
+        ix1 = max(ax1, bx1); iy1 = max(ay1, by1)
+        ix2 = min(ax2, bx2); iy2 = min(ay2, by2)
+        inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+        if inter == 0:
+            return 0.0
+        ua = (ax2-ax1)*(ay2-ay1)
+        ub = (bx2-bx1)*(by2-by1)
+        return inter / (ua + ub - inter)
+
+    def update(self, detections: list[dict], ts: float) -> list[dict]:
+        """
+        Match new detections to existing tracks.
+        Returns detections enriched with track_id, direction, dwell_s.
+        """
+        import time as _time
+
+        # Expire old tracks
+        expired = [tid for tid, t in self._tracks.items()
+                   if ts - t["last_ts"] > self.EXPIRE_S]
+        for tid in expired:
+            del self._tracks[tid]
+
+        # Match detections to tracks via greedy IoU
+        matched:   dict[int, int] = {}  # detection_idx → track_id
+        used_tids: set[int]       = set()
+
+        person_dets = [(i, d) for i, d in enumerate(detections) if d["class"] == "person"]
+
+        for i, d in person_dets:
+            best_iou = self.IOU_THRESH
+            best_tid = None
+            for tid, t in self._tracks.items():
+                if tid in used_tids:
+                    continue
+                iou = self._iou(d["bbox"], t["bbox"])
+                if iou > best_iou:
+                    best_iou = iou
+                    best_tid = tid
+            if best_tid is not None:
+                matched[i]         = best_tid
+                used_tids.add(best_tid)
+
+        # Update matched tracks; create new ones for unmatched
+        enriched = list(detections)
+        for i, d in person_dets:
+            if i in matched:
+                tid   = matched[i]
+                track = self._tracks[tid]
+                # Direction based on area change
+                prev_area = track.get("area", d["area"])
+                if prev_area > 0:
+                    delta = (d["area"] - prev_area) / prev_area
+                    if delta > self.APPROACH_THRESH:
+                        direction = "APPROACHING"
+                    elif delta < -self.APPROACH_THRESH:
+                        direction = "DEPARTING"
+                    else:
+                        direction = "STATIONARY"
+                else:
+                    direction = "UNKNOWN"
+                dwell_s = ts - track["first_ts"]
+                # Update track state
+                track.update({
+                    "bbox":    d["bbox"],
+                    "area":    d["area"],
+                    "cx":      d["cx"],
+                    "cy":      d["cy"],
+                    "last_ts": ts,
+                    "direction": direction,
+                })
+            else:
+                # New track
+                tid = self._next_id
+                self._next_id += 1
+                self._tracks[tid] = {
+                    "bbox":      d["bbox"],
+                    "area":      d["area"],
+                    "cx":        d["cx"],
+                    "cy":        d["cy"],
+                    "first_ts":  ts,
+                    "last_ts":   ts,
+                    "direction": "UNKNOWN",
+                }
+                direction = "UNKNOWN"
+                dwell_s   = 0.0
+
+            enriched[i] = {
+                **d,
+                "track_id":  tid,
+                "direction": direction,
+                "dwell_s":   round(dwell_s, 1),
+            }
+
+        return enriched
+
+
+# ── Global tracker registry (one per camera) ──────────────────────
+_trackers: dict[str, PersonTracker] = {}
+
+
+def get_tracker(cam_id: str) -> PersonTracker:
+    if cam_id not in _trackers:
+        _trackers[cam_id] = PersonTracker(cam_id)
+    return _trackers[cam_id]
 
 
 # ── Bounding-box annotation ───────────────────────────────────────

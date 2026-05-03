@@ -631,6 +631,193 @@
     .tl-time { color: var(--cyan); min-width: 60px; letter-spacing: 0.5px; }
     .tl-day  { color: var(--dim);  min-width: 70px; }
     .tl-cam  { color: var(--green); letter-spacing: 1px; }
+
+    /* ── TRACKING DIRECTION BADGES ── */
+    .det-approaching { background: rgba(255,59,59,0.15);  color: var(--red);    border: 1px solid #5a0000; }
+    .det-departing   { background: rgba(0,184,217,0.1);   color: var(--cyan);   border: 1px solid #0d3a45; }
+    .det-stationary  { background: rgba(245,196,0,0.08);  color: var(--yellow); border: 1px solid #3d3000; }
+    .det-dwell       { background: rgba(0,0,0,0.4);        color: var(--dim);    border: 1px solid var(--border2); }
+    .det-person-count {
+      position: absolute; top: 5px; left: 7px; z-index: 8;
+      background: rgba(0,212,106,0.12); border: 1px solid var(--green-dim);
+      border-radius: 2px; padding: 2px 7px;
+      font-size: 18px; font-weight: 700; color: var(--green);
+      text-shadow: 0 0 12px rgba(0,212,106,0.6); line-height: 1.2;
+      pointer-events: none;
+    }
+    .det-person-count-label {
+      font-size: 6px; letter-spacing: 2px; color: var(--green); opacity: 0.7;
+      display: block; text-align: center;
+    }
+
+    /* ── MONITOR BUTTON (on tile header) ── */
+    .monitor-btn {
+      font-family: 'JetBrains Mono', monospace; font-size: 6px;
+      letter-spacing: 1px; padding: 2px 5px;
+      border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer; text-decoration: none;
+    }
+    .monitor-btn:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── PALANTIR TERMINAL ── */
+    #palantir-panel {
+      position: fixed; right: 0; top: var(--header-h);
+      bottom: var(--footer-h); width: 420px;
+      background: rgba(3, 6, 8, 0.97);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      transform: translateX(100%);
+      transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      z-index: 50;
+    }
+    #palantir-panel.open { transform: translateX(0); }
+
+    #palantir-header {
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0; position: relative;
+    }
+    .pal-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 4px; color: var(--green);
+      text-shadow: 0 0 16px rgba(0,212,106,0.5);
+    }
+    .pal-sub {
+      font-size: 7px; letter-spacing: 2px; color: var(--dim); margin-top: 2px;
+    }
+    #palantir-close {
+      position: absolute; top: 12px; right: 14px;
+      font-family: 'JetBrains Mono', monospace; font-size: 8px;
+      letter-spacing: 1px; padding: 3px 8px;
+      border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    #palantir-close:hover { border-color: var(--red); color: var(--red); }
+
+    /* Chat history */
+    #palantir-history {
+      flex: 1; overflow-y: auto; padding: 12px 14px;
+      display: flex; flex-direction: column; gap: 14px;
+    }
+    .pal-msg-op, .pal-msg-agent {
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .pal-label-op    { font-size: 7px; letter-spacing: 2px; color: var(--dim); }
+    .pal-label-agent { font-size: 7px; letter-spacing: 2px; color: var(--green); }
+    .pal-text-op {
+      font-size: 9px; letter-spacing: 0.5px; color: var(--text);
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border2);
+      border-radius: 2px; padding: 6px 10px; line-height: 1.6;
+    }
+    .pal-text-agent {
+      font-size: 9px; letter-spacing: 0.5px; color: var(--green);
+      line-height: 1.8; white-space: pre-wrap;
+      border-left: 2px solid var(--green-dim); padding-left: 10px;
+    }
+    .pal-intent {
+      font-size: 7px; color: var(--dim); letter-spacing: 1px; margin-top: 2px;
+    }
+
+    /* Typing indicator */
+    #pal-typing {
+      display: none; padding: 6px 10px;
+      font-size: 9px; color: var(--green); letter-spacing: 2px;
+    }
+    #pal-typing.show { display: block; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+    .blink { animation: blink 1s infinite; }
+
+    /* Input area */
+    #palantir-input-wrap {
+      padding: 10px 14px; border-top: 1px solid var(--border); flex-shrink: 0;
+    }
+    .pal-prompt-line {
+      font-size: 8px; color: var(--dim); letter-spacing: 1px;
+      margin-bottom: 6px; display: flex; justify-content: space-between;
+    }
+    #palantir-input-row { display: flex; gap: 6px; align-items: center; }
+    #palantir-input {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 0.5px;
+      background: rgba(0,212,106,0.04); border: 1px solid var(--green-dim);
+      color: var(--green); padding: 7px 10px; border-radius: 2px;
+      outline: none; caret-color: var(--green);
+    }
+    #palantir-input:focus { border-color: var(--green); box-shadow: 0 0 8px rgba(0,212,106,0.15); }
+    #palantir-input::placeholder { color: var(--dim); font-size: 8px; }
+    #palantir-send {
+      font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px;
+      padding: 7px 12px; border: 1px solid var(--green-dim); border-radius: 2px;
+      background: rgba(0,212,106,0.06); color: var(--green); cursor: pointer;
+    }
+    #palantir-send:hover { background: rgba(0,212,106,0.12); border-color: var(--green); }
+
+    /* Quick commands */
+    .pal-quick-cmds {
+      display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px;
+    }
+    .pal-qcmd {
+      font-family: 'JetBrains Mono', monospace; font-size: 7px; letter-spacing: 0.5px;
+      padding: 2px 7px; border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    .pal-qcmd:hover { border-color: var(--green); color: var(--green); }
+
+    /* LLM indicator */
+    #pal-llm-badge {
+      font-size: 7px; letter-spacing: 1px; padding: 1px 5px;
+      border-radius: 2px; background: rgba(0,212,106,0.08);
+      color: var(--dim); border: 1px solid var(--border2);
+    }
+    #pal-llm-badge.active { color: var(--green); border-color: var(--green-dim); background: rgba(0,212,106,0.12); }
+
+    /* PALANTIR sidebar button glow when open */
+    .city-btn.palantir-active {
+      color: var(--green);
+      border-left-color: var(--green);
+      background: rgba(0,212,106,0.06);
+    }
+
+    /* Overlay for grid dimming when PALANTIR is open */
+    #palantir-backdrop {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.3); z-index: 49;
+    }
+    #palantir-backdrop.show { display: block; }
+
+    /* ── FULLSCREEN CAMERA OVERLAY ── */
+    #cam-fullscreen {
+      display: none; position: fixed; inset: 0;
+      background: #000; z-index: 200; flex-direction: column;
+    }
+    #cam-fullscreen.open { display: flex; }
+    #fsm-header {
+      height: 38px; background: rgba(9,14,20,0.9);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px; flex-shrink: 0; z-index: 5;
+    }
+    #fsm-title { font-size: 10px; font-weight: 700; letter-spacing: 3px; color: var(--green); }
+    #fsm-close {
+      font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px;
+      padding: 4px 10px; border: 1px solid var(--border); border-radius: 2px;
+      background: transparent; color: var(--dim); cursor: pointer;
+    }
+    #fsm-close:hover { border-color: var(--red); color: var(--red); }
+    #fsm-body { flex: 1; position: relative; overflow: hidden; background: #000; }
+    #fsm-body iframe, #fsm-body video, #fsm-body img {
+      width: 100%; height: 100%; border: none; display: block; object-fit: contain;
+    }
+    #fsm-info {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 5;
+      padding: 8px 14px; background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+      display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+    }
+    #fsm-header .fsm-meta { font-size: 8px; color: var(--dim); letter-spacing: 1px; }
+    /* CRT overlay for fullscreen */
+    #fsm-body::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+      background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);
+    }
   </style>
 </head>
 <body>
@@ -733,7 +920,14 @@
       PERSONS
       <span class="cb-sub" id="sb-profile-count">LOADING...</span>
     </button>
-
+    <button class="city-btn" id="btn-palantir" onclick="togglePalantir()">
+      PALANTIR
+      <span class="cb-sub" id="sb-palantir-sub">AI SECURITY AGENT</span>
+    </button>
+    <button class="city-btn" onclick="window.open('/monitor','_blank')">
+      MONITOR MODE
+      <span class="cb-sub">DEDICATED CAMERA VIEW</span>
+    </button>
     <div class="sb-spacer"></div>
     <div class="sb-bottom">
       <div id="sb-source">SRC: CALTRANS D8</div>
@@ -746,9 +940,12 @@
 
     <!-- TILE 1: Front Cam (permanent) -->
     <div class="tile personal">
-      <div class="tile-header">
+      <div class="tile-header" style="cursor:pointer" onclick="enterFullscreen('front_cam','FRONT CAM')">
         <div class="tile-label">FRONT CAM</div>
-        <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
+          <span class="monitor-btn" title="Open in monitor mode">⊞</span>
+        </div>
       </div>
       <div class="tile-body" style="position:relative;">
         <iframe src="/go2rtc/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
@@ -760,9 +957,12 @@
 
     <!-- TILE 2: Doorbell — clip/snap when captured, motion indicator when standby -->
     <div class="tile personal">
-      <div class="tile-header">
+      <div class="tile-header" style="cursor:pointer" onclick="enterFullscreen('doorbell','DOORBELL · D210')">
         <div class="tile-label">DOORBELL · D210</div>
-        <div class="tile-meta" id="bell-meta">STANDBY</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="tile-meta" id="bell-meta">STANDBY</div>
+          <span class="monitor-btn" title="Open in monitor mode">⊞</span>
+        </div>
       </div>
       <div class="tile-body" style="background:#000;position:relative;">
         <video id="bell-clip" style="width:100%;height:100%;object-fit:cover;display:none;" autoplay muted loop playsinline></video>
@@ -858,6 +1058,66 @@
 
   </div><!-- /#grid -->
 </div><!-- /#main -->
+
+<!-- ── PALANTIR TERMINAL ── -->
+<div id="palantir-backdrop" onclick="closePalantir()"></div>
+<div id="palantir-panel">
+  <div id="palantir-header">
+    <div class="pal-title">PALANTIR</div>
+    <div class="pal-sub">TACTICAL AI SECURITY ANALYST · PALM COMMAND v1.2</div>
+    <button id="palantir-close" onclick="closePalantir()">✕ CLOSE</button>
+  </div>
+  <div id="palantir-history">
+    <!-- Welcome message -->
+    <div class="pal-msg-agent">
+      <div class="pal-label-agent">PALANTIR ·</div>
+      <div class="pal-text-agent">▸ PALANTIR online. PALM COMMAND AI Security Analyst active.
+▸ I have access to your camera events, person profiles, activity trends, and anomaly data.
+▸ Ask me anything about your surveillance system.
+▸ Type <span style="color:var(--green-dim)">'help'</span> for full command reference.</div>
+    </div>
+  </div>
+  <div id="pal-typing"><span class="blink">█</span> PALANTIR processing...</div>
+  <div id="palantir-input-wrap">
+    <div class="pal-prompt-line">
+      <span>OPERATOR QUERY</span>
+      <span id="pal-llm-badge">RULE-BASED ENGINE</span>
+    </div>
+    <div id="palantir-input-row">
+      <input id="palantir-input" type="text" placeholder="Ask about your cameras, persons, events..." autocomplete="off"
+        onkeydown="if(event.key==='Enter')palantirSend()">
+      <button id="palantir-send" onclick="palantirSend()">SEND ▶</button>
+    </div>
+    <div class="pal-quick-cmds">
+      <button class="pal-qcmd" onclick="palantirQuery('briefing')">BRIEFING</button>
+      <button class="pal-qcmd" onclick="palantirQuery('who was here today')">WHO TODAY</button>
+      <button class="pal-qcmd" onclick="palantirQuery('any strangers')">STRANGERS</button>
+      <button class="pal-qcmd" onclick="palantirQuery('any anomalies')">ANOMALIES</button>
+      <button class="pal-qcmd" onclick="palantirQuery('activity trend')">TREND</button>
+      <button class="pal-qcmd" onclick="palantirQuery('recent events')">RECENT</button>
+      <button class="pal-qcmd" onclick="palantirQuery('help')">HELP</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── FULLSCREEN CAMERA OVERLAY ── -->
+<div id="cam-fullscreen">
+  <div id="fsm-header">
+    <div>
+      <div id="fsm-title">CAMERA · FULLSCREEN</div>
+      <div class="fsm-meta" id="fsm-meta"></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button onclick="window.open('/monitor?cam='+fsmActiveCam,'_blank')" style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--border);border-radius:2px;background:transparent;color:var(--dim);cursor:pointer">⊞ MONITOR</button>
+      <button id="fsm-close" onclick="exitFullscreen()">✕ EXIT  [ESC]</button>
+    </div>
+  </div>
+  <div id="fsm-body">
+    <iframe id="fsm-iframe" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+    <img    id="fsm-img"    style="display:none;width:100%;height:100%;object-fit:contain;" alt="">
+    <div id="fsm-info"></div>
+  </div>
+</div>
 
 <!-- ── AI INTEL OVERLAY ── -->
 <div id="ai-overlay">
@@ -1406,22 +1666,64 @@ function renderDetBar(barEl, detections, profiles) {
     bus: 'det-car', motorcycle: 'det-car', bicycle: 'det-car',
     backpack: 'det-backpack', handbag: 'det-backpack', suitcase: 'det-backpack',
   };
+
   let html = '';
+  const persons = (detections || []).filter(d => d.class === 'person');
+
+  // Person count badge (big)
+  const pCountEl = barEl.closest('.tile-body')
+    ? barEl.closest('.tile-body').querySelector('.det-person-count') : null;
+
   if (hasDet) {
+    // Non-person classes first
     html += (detections || [])
+      .filter(d => d.class !== 'person')
       .sort((a, b) => b.confidence - a.confidence)
       .map(d => {
         const cls = clsMap[d.class] || 'det-person';
         return `<span class="det-tag ${cls}">${d.class.toUpperCase()} ${Math.round(d.confidence * 100)}%</span>`;
       }).join('');
+
+    // Person tags with tracking info
+    persons.forEach((d, i) => {
+      const conf = Math.round(d.confidence * 100);
+      const label = (profiles && profiles[i]) ? profiles[i].label : `PERSON`;
+      html += `<span class="det-tag det-person">${label} ${conf}%</span>`;
+
+      // Direction badge
+      if (d.direction && d.direction !== 'UNKNOWN') {
+        const dirClass = 'det-' + d.direction.toLowerCase();
+        const arrow = d.direction === 'APPROACHING' ? '→' : d.direction === 'DEPARTING' ? '←' : '◉';
+        html += `<span class="det-tag ${dirClass}">${arrow} ${d.direction}</span>`;
+      }
+
+      // Dwell time badge (show if >5 seconds)
+      if (d.dwell_s && d.dwell_s > 5) {
+        const dwell = d.dwell_s < 60 ? `${Math.round(d.dwell_s)}s` : `${Math.floor(d.dwell_s/60)}m${Math.round(d.dwell_s%60)}s`;
+        html += `<span class="det-tag det-dwell">⏱ ${dwell}</span>`;
+      }
+    });
   }
-  if (hasProf) {
+
+  if (hasProf && persons.length === 0) {
+    // Show profile tags if no live persons matched above
     html += (profiles || []).map(p => {
       const isReg = p.label && p.label.startsWith('REGULAR');
       return `<span class="det-profile${isReg ? ' regular' : ''}">${p.label}</span>`;
     }).join('');
   }
+
   barEl.innerHTML = html;
+
+  // Update the floating person count badge if it exists in this tile
+  if (pCountEl) {
+    if (persons.length > 0) {
+      pCountEl.style.display = 'block';
+      pCountEl.innerHTML = `${persons.length}<span class="det-person-count-label">PERSON${persons.length > 1 ? 'S' : ''}</span>`;
+    } else {
+      pCountEl.style.display = 'none';
+    }
+  }
 }
 
 async function refreshFrontCam() {
@@ -1894,6 +2196,201 @@ async function refreshVelocity() {
 }
 setInterval(refreshVelocity, 60000);
 refreshVelocity();
+
+// ── PALANTIR AGENT TERMINAL ──────────────────────────────────────
+let palantirOpen = false;
+
+function togglePalantir() {
+  if (palantirOpen) closePalantir(); else openPalantir();
+}
+
+function openPalantir() {
+  palantirOpen = true;
+  document.getElementById('palantir-panel').classList.add('open');
+  document.getElementById('palantir-backdrop').classList.add('show');
+  document.getElementById('btn-palantir').classList.add('palantir-active');
+  document.getElementById('sb-palantir-sub').textContent = 'ONLINE ●';
+  document.getElementById('sb-palantir-sub').style.color = 'var(--green)';
+  setTimeout(() => document.getElementById('palantir-input').focus(), 300);
+}
+
+function closePalantir() {
+  palantirOpen = false;
+  document.getElementById('palantir-panel').classList.remove('open');
+  document.getElementById('palantir-backdrop').classList.remove('show');
+  document.getElementById('btn-palantir').classList.remove('palantir-active');
+  document.getElementById('sb-palantir-sub').textContent = 'AI SECURITY AGENT';
+  document.getElementById('sb-palantir-sub').style.color = '';
+}
+
+function palantirQuery(text) {
+  if (!palantirOpen) openPalantir();
+  document.getElementById('palantir-input').value = text;
+  palantirSend();
+}
+
+async function palantirSend() {
+  const input = document.getElementById('palantir-input');
+  const text  = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  // Append operator message
+  appendPalMessage('op', text);
+
+  // Show typing indicator
+  const typing = document.getElementById('pal-typing');
+  typing.classList.add('show');
+
+  try {
+    const res = await fetch('/api/agent/query', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text, camera: null }),
+    });
+
+    typing.classList.remove('show');
+
+    if (!res.ok) {
+      appendPalMessage('agent', '▸ WATCHER OFFLINE\n▸ Start the camera watcher service to enable full intelligence queries.\n▸ Basic help is still available — type \'help\'.');
+      return;
+    }
+
+    const data = await res.json();
+    appendPalMessage('agent', data.answer || '▸ No response.', data.intent, data.llm_used);
+
+    // Update LLM badge
+    const badge = document.getElementById('pal-llm-badge');
+    if (badge) {
+      if (data.has_llm) {
+        badge.textContent = 'LLM ACTIVE';
+        badge.classList.add('active');
+      } else {
+        badge.textContent = 'RULE ENGINE';
+      }
+    }
+  } catch {
+    typing.classList.remove('show');
+    appendPalMessage('agent', '▸ CONNECTION FAILED\n▸ Watcher service offline. No intelligence data available.');
+  }
+}
+
+function appendPalMessage(role, text, intent, llmUsed) {
+  const hist = document.getElementById('palantir-history');
+  const div  = document.createElement('div');
+
+  if (role === 'op') {
+    div.className = 'pal-msg-op';
+    div.innerHTML = `<div class="pal-label-op">OPERATOR &gt;</div><div class="pal-text-op">${escHtml(text)}</div>`;
+  } else {
+    div.className = 'pal-msg-agent';
+    const intentLabel = intent ? ` · <span style="color:var(--dim);">${intent.toUpperCase().replace('_',' ')}</span>` : '';
+    const llmLabel = llmUsed ? ' · <span style="color:var(--green);opacity:0.5;">LLM</span>' : '';
+    div.innerHTML = `
+      <div class="pal-label-agent">PALANTIR${intentLabel}${llmLabel}</div>
+      <div class="pal-text-agent">${escHtml(text)}</div>`;
+  }
+
+  hist.appendChild(div);
+  hist.scrollTop = hist.scrollHeight;
+}
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/\n/g, '<br>');
+}
+
+// ── FULLSCREEN CAMERA OVERLAY ─────────────────────────────────────
+let fsmActiveCam    = 'doorbell';
+let fsmRefreshTimer = null;
+
+function enterFullscreen(camId, label) {
+  fsmActiveCam = camId;
+  const overlay = document.getElementById('cam-fullscreen');
+  const iframe  = document.getElementById('fsm-iframe');
+  const img     = document.getElementById('fsm-img');
+  const title   = document.getElementById('fsm-title');
+  const meta    = document.getElementById('fsm-meta');
+
+  title.textContent = label;
+  overlay.classList.add('open');
+
+  // Use go2rtc stream if it's a personal cam, otherwise show latest snap
+  if (camId === 'front_cam') {
+    iframe.src          = `/go2rtc/stream.html?src=${camId}&mode=mse,webrtc`;
+    iframe.style.display = 'block';
+    img.style.display   = 'none';
+    meta.textContent    = 'go2rtc · LIVE STREAM';
+  } else {
+    iframe.style.display = 'none';
+    iframe.src           = '';
+    img.style.display    = 'block';
+    // Poll latest annotated snap
+    const doRefresh = () => {
+      img.src = `/api/snap_ann/${camId}?t=${Date.now()}`;
+    };
+    doRefresh();
+    fsmRefreshTimer = setInterval(doRefresh, 2500);
+    meta.textContent = 'SNAPSHOT + AI · 2.5s REFRESH';
+  }
+
+  // Live detection info in overlay bar
+  fsmRefreshStatus();
+  fsmStatusTimer = setInterval(fsmRefreshStatus, 4000);
+}
+
+let fsmStatusTimer = null;
+
+async function fsmRefreshStatus() {
+  try {
+    const res = await fetch(`/api/status/${fsmActiveCam}`);
+    if (!res.ok) return;
+    const d   = await res.json();
+    const bar = document.getElementById('fsm-info');
+    if (!bar) return;
+
+    const dets  = d.detections || [];
+    const profs = d.profiles   || [];
+    let html = '';
+
+    if (d.summary) html += `<span style="font-size:8px;letter-spacing:1px;color:var(--cyan);background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:2px;">${d.summary}</span>`;
+
+    dets.filter(d => d.class === 'person').forEach((p, i) => {
+      const label = profs[i] ? profs[i].label : `PERSON ${i+1}`;
+      const conf  = Math.round(p.confidence * 100);
+      const dir   = p.direction && p.direction !== 'UNKNOWN' ? ` · ${p.direction}` : '';
+      const arrow = p.direction === 'APPROACHING' ? '→ ' : p.direction === 'DEPARTING' ? '← ' : '';
+      const color = p.direction === 'APPROACHING' ? 'var(--red)' : p.direction === 'DEPARTING' ? 'var(--cyan)' : 'var(--green)';
+      html += `<span style="font-size:8px;letter-spacing:1px;color:${color};background:rgba(0,0,0,0.5);padding:2px 8px;border-radius:2px;border:1px solid ${color}33;">${arrow}${label} ${conf}%</span>`;
+    });
+
+    bar.innerHTML = html;
+  } catch {}
+}
+
+function exitFullscreen() {
+  document.getElementById('cam-fullscreen').classList.remove('open');
+  document.getElementById('fsm-iframe').src = '';
+  document.getElementById('fsm-img').src    = '';
+  clearInterval(fsmRefreshTimer);
+  clearInterval(fsmStatusTimer);
+  fsmRefreshTimer = null; fsmStatusTimer = null;
+}
+
+// ESC key exits fullscreen or closes PALANTIR
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('cam-fullscreen').classList.contains('open')) {
+      exitFullscreen();
+    } else if (palantirOpen) {
+      closePalantir();
+    }
+  }
+});
 
 // ── INIT ─────────────────────────────────────────────────────────
 // Stagger starting cam indices so tiles show different cams on load

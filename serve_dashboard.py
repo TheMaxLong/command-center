@@ -29,8 +29,71 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._proxy(WATCHER_URL, self.path[4:])  # strip /api
         elif self.path.startswith("/go2rtc/"):
             self._proxy(GO2RTC_URL, self.path[7:])   # strip /go2rtc
+        elif self.path.rstrip("/") == "/monitor" or self.path.startswith("/monitor?"):
+            # Serve dedicated monitor page
+            monitor = DASHBOARD_DIR / "monitor.html"
+            self._serve_file(monitor, "text/html")
         else:
             super().do_GET()
+
+    def do_POST(self):
+        if self.path.startswith("/api/"):
+            self._proxy_post(WATCHER_URL, self.path[4:])
+        else:
+            self.send_response(404); self.end_headers()
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_PATCH(self):
+        if self.path.startswith("/api/"):
+            self._proxy_post(WATCHER_URL, self.path[4:], method="PATCH")
+        else:
+            self.send_response(404); self.end_headers()
+
+    def _serve_file(self, path: Path, mime: str):
+        if not path.exists():
+            self.send_response(404); self.end_headers(); return
+        data = path.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", mime)
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _proxy_post(self, base_url: str, path: str, method: str = "POST"):
+        target = base_url + path
+        length = int(self.headers.get("Content-Length", 0))
+        body   = self.rfile.read(length) if length else b""
+        ct     = self.headers.get("Content-Type", "application/json")
+        try:
+            req = urllib.request.Request(target, data=body, method=method)
+            req.add_header("Content-Type", ct)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp_body = resp.read()
+                self.send_response(resp.status)
+                for key, val in resp.headers.items():
+                    if key.lower() not in ("transfer-encoding", "connection"):
+                        self.send_header(key, val)
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(resp_body)
+        except urllib.error.URLError:
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(b'{"error":"backend offline"}')
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(str(e).encode())
 
     def _proxy(self, base_url: str, path: str):
         target = base_url + path
