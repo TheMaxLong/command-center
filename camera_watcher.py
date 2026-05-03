@@ -43,6 +43,8 @@ import camera_adapters
 import camera_discover
 import entity_resolution
 import forward_intel
+import notifier
+import evidence_export
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -211,6 +213,7 @@ def _run_ai_and_store(
                             alert_msg = (f"FACE INTEL HIT: {top['name']} "
                                          f"({top['source']}) conf={top['confidence']} on {cam_id}")
                             event_db.insert_alert("face_intel", "critical", alert_msg, cam_id, event_ts)
+                            notifier.notify_critical("face_intel", alert_msg, cam_id)
                             print(f"[face_intel] ⚠ {alert_msg}", flush=True)
                 except Exception as fe:
                     print(f"[face_intel] error: {fe}", flush=True)
@@ -220,6 +223,7 @@ def _run_ai_and_store(
         if intel_engine.stranger_alert(pid, event_ts, cam_id):
             msg = f"Unknown person on {cam_id.upper()} during off-peak hours"
             event_db.insert_alert("stranger", "warn", msg, cam_id, event_ts)
+            notifier.notify("stranger", "medium", msg, cam_id)
             print(f"[intel] ALERT: {msg}", flush=True)
 
     # ── Entity resolution: fuse face + gait + appearance into single identity
@@ -255,6 +259,8 @@ def _run_ai_and_store(
                                  f"{' · '.join(score['reasons'][:2])}")
                     event_db.insert_alert("threat_score", score["level"].lower(),
                                           alert_msg, cam_id, event_ts)
+                    sev = "critical" if score["level"] == "RED" else "high"
+                    notifier.notify("threat_score", sev, alert_msg, cam_id)
         except Exception as pe:
             print(f"[pattern] scoring error: {pe}", flush=True)
 
@@ -558,11 +564,39 @@ async def rtsp_poll_loop(cam_cfg: dict) -> None:
 
 # ── HTTP server ───────────────────────────────────────────────────
 
+_PALM_API_TOKEN = os.environ.get("PALM_API_TOKEN", "")
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a) -> None:
         pass
 
+    def _auth_ok(self) -> bool:
+        """Return True if request is authorised. Localhost (dashboard proxy) always passes."""
+        if not _PALM_API_TOKEN:
+            return True                          # auth disabled — dev mode
+        client_ip = self.client_address[0]
+        if client_ip in ("127.0.0.1", "::1"):
+            return True                          # internal proxy — always trusted
+        sent = self.headers.get("X-Palm-Token", "")
+        return sent == _PALM_API_TOKEN
+
+    def _unauthorized(self) -> None:
+        body = json.dumps({
+            "error": "unauthorized",
+            "hint":  "Include header X-Palm-Token: <your PALM_API_TOKEN>",
+        }).encode()
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("WWW-Authenticate", 'Bearer realm="PALM COMMAND"')
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
+        if not self._auth_ok():
+            self._unauthorized(); return
         parsed = urlparse(self.path)
         parts  = parsed.path.strip("/").split("/")
         qs     = parse_qs(parsed.query)
@@ -814,6 +848,51 @@ class Handler(BaseHTTPRequestHandler):
             })
 
         # ─── Forward intelligence endpoints ─────────────────────────────
+        # ─── Notification engine ────────────────────────────────────────
+        elif p == "/api/notify/status":
+            self._json(notifier.get_status())
+
+        elif p == "/api/notify/test":
+            self._json(notifier.test_notify())
+
+        # ─── Evidence export ────────────────────────────────────────────
+        elif parsed.path.startswith("/api/evidence/profile/"):
+            raw = parsed.path.split("/api/evidence/profile/", 1)[1].rstrip("/")
+            try:
+                pid   = int(raw)
+                hours = float(parse_qs(parsed.query).get("hours", ["72"])[0])
+                zdata = evidence_export.generate_package(profile_id=pid, hours=hours)
+                fname = evidence_export.package_filename(f"profile-{pid}")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Length", str(len(zdata)))
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(zdata)
+            except ValueError:
+                self._not_found()
+            except Exception as e:
+                self._json({"error": str(e)})
+
+        elif parsed.path.startswith("/api/evidence/"):
+            eid = parsed.path.split("/api/evidence/", 1)[1].rstrip("/")
+            if not eid or len(eid) > 64 or not all(c.isalnum() or c in "-_" for c in eid):
+                self._not_found(); return
+            try:
+                hours = float(parse_qs(parsed.query).get("hours", ["72"])[0])
+                zdata = evidence_export.generate_package(entity_id=eid, hours=hours)
+                fname = evidence_export.package_filename(eid)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/zip")
+                self.send_header("Content-Length", str(len(zdata)))
+                self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(zdata)
+            except Exception as e:
+                self._json({"error": str(e)})
+
         elif p == "/intel/forecast":
             self._json({
                 "scenarios": forward_intel.build_scenarios(),
@@ -833,6 +912,8 @@ class Handler(BaseHTTPRequestHandler):
             self._not_found()
 
     def do_PATCH(self) -> None:
+        if not self._auth_ok():
+            self._unauthorized(); return
         parsed = urlparse(self.path)
         parts  = parsed.path.strip("/").split("/")
 
@@ -855,6 +936,8 @@ class Handler(BaseHTTPRequestHandler):
             self._not_found()
 
     def do_POST(self) -> None:
+        if not self._auth_ok():
+            self._unauthorized(); return
         parsed = urlparse(self.path)
         p      = parsed.path.rstrip("/")
 
@@ -879,7 +962,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Palm-Token")
         self.end_headers()
 
     def _cam_status(self, cam_id: str) -> dict:

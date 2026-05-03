@@ -185,6 +185,12 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
                         "camera discovery", "network scan", "what cameras", "detect cameras"]),
     ("adapters",       ["camera adapter", "adapters", "supported camera", "what cameras support",
                         "camera vendor", "vendor list", "supported vendors", "camera brands"]),
+    ("notify_status",  ["notification", "push notification", "ntfy", "ntfy.sh", "alert delivery",
+                        "sms alert", "text alert", "push status", "delivery status", "notify status",
+                        "test notification", "send test", "push test"]),
+    ("evidence",       ["evidence", "evidence package", "export evidence", "evidence report",
+                        "package evidence", "download report", "zip report", "generate evidence",
+                        "incident report", "evidence for", "package for"]),
     # ── External intelligence feeds ──────────────────────────────────
     ("earthquake",     ["earthquake", "quake", "seismic", "tremor", "fault", "shaking", "richter", "magnitude"]),
     ("weather_alert",  ["weather alert", "fire weather", "red flag", "air quality", "aqi", "heat warning",
@@ -898,6 +904,75 @@ def _handle_adapters(text: str, camera_id) -> dict:
         return {"intent": "adapters", "answer": f"▸ Adapter registry error: {e}", "data": {}}
 
 
+def _handle_notify_status(text: str, camera_id) -> dict:
+    try:
+        import notifier as _n
+        if "test" in text.lower() or "send test" in text.lower():
+            result = _n.test_notify()
+            lines = ["▸ NOTIFICATION TEST — PALM COMMAND"]
+            lines.append(f"▸ ntfy.sh: {'ENABLED' if result['ntfy_enabled'] else 'DISABLED'}")
+            if result["ntfy_url"]:
+                lines.append(f"  Subscribe: {result['ntfy_url']}")
+            lines.append(f"▸ SMS: {'ENABLED' if result['sms_enabled'] else 'DISABLED'}")
+            lines.append("▸ Test notification sent — check your device.")
+            return {"intent": "notify_status", "answer": "\n".join(lines), "data": result}
+        return {"intent": "notify_status", "answer": _n.briefing(), "data": _n.get_status()}
+    except Exception as e:
+        return {"intent": "notify_status", "answer": f"▸ Notifier error: {e}", "data": {}}
+
+
+def _handle_evidence(text: str, camera_id) -> dict:
+    try:
+        import re as _re
+        t = text.lower()
+        m = _re.search(r"(e\d{6,}|profile[- ]?(\d+)|regular[- ]?(\d+)|unknown[- ]?(\d+))", t)
+        if not m:
+            lines = [
+                "▸ EVIDENCE PACKAGE — PALM COMMAND",
+                "▸ Bundles identity data, timeline, snapshots, gait & face intel",
+                "  into a downloadable ZIP archive.",
+                "",
+                "▸ Usage: 'generate evidence for profile 3'",
+                "▸        'evidence for E0012345678'",
+                "▸ Or hit: GET /api/evidence/<entity_id>?hours=72",
+                "▸         GET /api/evidence/profile/<id>?hours=72",
+            ]
+            return {"intent": "evidence", "answer": "\n".join(lines), "data": {}}
+
+        # Parse the ID type
+        raw = m.group(1)
+        pid: Optional[int] = None
+        eid: Optional[str] = None
+        for group in m.groups()[1:]:
+            if group:
+                pid = int(group)
+                break
+        if not pid and raw.startswith("e") and raw[1:].isdigit():
+            eid = raw.upper()
+
+        hours = 72.0
+        hm = _re.search(r"(\d+)\s*hours?", t)
+        if hm:
+            hours = float(hm.group(1))
+
+        label = eid or f"profile-{pid}"
+        lines = [
+            f"▸ EVIDENCE PACKAGE — {label.upper()}",
+            f"▸ Window: last {int(hours)}h",
+            f"▸ Download: GET /api/evidence/{'profile/' + str(pid) if pid else eid}?hours={int(hours)}",
+            "▸ Package contains: timeline · entity profile · gait · face matches · snapshots",
+            "▸ Format: ZIP archive (self-contained, court-ready)",
+        ]
+        return {
+            "intent": "evidence",
+            "answer": "\n".join(lines),
+            "data": {"entity_id": eid, "profile_id": pid, "hours": hours,
+                     "download_url": f"/api/evidence/{'profile/' + str(pid) if pid else eid}?hours={int(hours)}"},
+        }
+    except Exception as e:
+        return {"intent": "evidence", "answer": f"▸ Evidence export error: {e}", "data": {}}
+
+
 def _handle_threat_score(text: str, camera_id) -> dict:
     try:
         import pattern_engine as _pe
@@ -993,11 +1068,23 @@ PALANTIR INTELLIGENCE LAYER:
   "Predict next arrival / when will they return"
   "Threat score profile [N]"
 
+NOTIFICATIONS:
+  "notification status" / "push status"
+  "test notification" / "send test push"
+
+EVIDENCE EXPORT:
+  "generate evidence for profile 3"
+  "evidence package for E0012345678"
+  GET /api/evidence/profile/<id>?hours=72
+  GET /api/evidence/<entity_id>?hours=72
+
 MISSION INTEL:
   Powered by PALM COMMAND database + NWS · USGS · CAL FIRE · Citizen
   FBI Most Wanted (1,160+ records) · Face intel · Gait biometrics
   Kalman filter tracking · LPR active on vehicle detections
   Pattern-of-life engine · Entity relationship graph · Threat scoring
+  Push alerts: ntfy.sh (set NTFY_TOPIC) · SMS: Twilio (set TWILIO_*)
+  API auth: set PALM_API_TOKEN (localhost/proxy always trusted)
   Set OPENAI_API_KEY or ANTHROPIC_API_KEY for LLM upgrade"""
     return {"intent": "help", "answer": answer, "data": {}}
 
@@ -1079,6 +1166,9 @@ def query(
         "entities":        _handle_entities,
         "discover":        _handle_discover,
         "adapters":        _handle_adapters,
+        # Notifications + evidence
+        "notify_status":   _handle_notify_status,
+        "evidence":        _handle_evidence,
         "help":           _handle_help,
         "general":        _handle_general,
     }
