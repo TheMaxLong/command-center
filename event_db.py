@@ -1,13 +1,15 @@
 #!/usr/bin/env python3.12
 """
-Persistent SQLite event store for PALM COMMAND.
+PALM COMMAND — Persistent SQLite event store v2.
 
-Schema:
-  events     – one row per motion event (any camera)
-  detections – one row per detected object within an event
+Schema additions over v1:
+  • merge_profiles()        — merge duplicate profiles
+  • set_profile_label()     — persist custom name for a profile
+  • get_events_in_range()   — time-range query for velocity tracking
+  • get_detection_summary() now supports weeks=0 (last 24h)
 """
 import json, os, sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +20,8 @@ def _conn() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     c = sqlite3.connect(str(DB_PATH))
     c.row_factory = sqlite3.Row
+    c.execute("PRAGMA journal_mode=WAL")
+    c.execute("PRAGMA foreign_keys=ON")
     return c
 
 
@@ -28,8 +32,8 @@ def init_db() -> None:
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 camera_id   TEXT    NOT NULL,
                 ts          REAL    NOT NULL,
-                day_of_week INTEGER NOT NULL,   -- 0=Mon … 6=Sun (Python weekday)
-                hour        INTEGER NOT NULL,   -- 0-23 UTC
+                day_of_week INTEGER NOT NULL,
+                hour        INTEGER NOT NULL,
                 clip_path   TEXT,
                 snap_path   TEXT,
                 created_at  TEXT    NOT NULL
@@ -42,21 +46,21 @@ def init_db() -> None:
                 event_id    INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
                 class_name  TEXT    NOT NULL,
                 confidence  REAL    NOT NULL,
-                bbox        TEXT            -- JSON [x1,y1,x2,y2]
+                bbox        TEXT,
+                instance    INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS idx_det_event ON detections(event_id);
             CREATE INDEX IF NOT EXISTS idx_det_class ON detections(class_name);
 
-            -- ── Person profiles ────────────────────────────────────────────
             CREATE TABLE IF NOT EXISTS profiles (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 first_seen  REAL    NOT NULL,
                 last_seen   REAL    NOT NULL,
                 sightings   INTEGER NOT NULL DEFAULT 1,
-                cameras     TEXT    NOT NULL DEFAULT '[]',  -- JSON list of cam_ids
-                embedding   TEXT    NOT NULL,               -- JSON float list (rolling avg)
-                thumb       BLOB,                           -- JPEG thumbnail bytes
-                label       TEXT                            -- optional human override
+                cameras     TEXT    NOT NULL DEFAULT '[]',
+                embedding   TEXT    NOT NULL,
+                thumb       BLOB,
+                label       TEXT
             );
 
             CREATE TABLE IF NOT EXISTS profile_sightings (
@@ -67,10 +71,30 @@ def init_db() -> None:
                 event_id    INTEGER REFERENCES events(id)
             );
             CREATE INDEX IF NOT EXISTS idx_ps_profile ON profile_sightings(profile_id, ts);
+
+            -- intel_alerts: pinned alerts surfaced to dashboard
+            CREATE TABLE IF NOT EXISTS intel_alerts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                type        TEXT    NOT NULL,
+                severity    TEXT    NOT NULL DEFAULT 'info',
+                message     TEXT    NOT NULL,
+                camera_id   TEXT,
+                ts          REAL    NOT NULL,
+                read        INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_alerts_ts ON intel_alerts(ts);
+
+            -- Migration: add instance column to detections if missing
+            -- (safe to run on existing databases)
         """)
+        # Safe column-add migrations
+        try:
+            c.execute("ALTER TABLE detections ADD COLUMN instance INTEGER NOT NULL DEFAULT 0")
+        except Exception:
+            pass
 
 
-# ── Write ──────────────────────────────────────────────────────────
+# ── Events ────────────────────────────────────────────────────────
 
 def insert_event(
     camera_id: str,
@@ -91,18 +115,24 @@ def insert_event(
 
 def add_detections(event_id: int, detections: list[dict]) -> None:
     rows = [
-        (event_id, d["class"], d["confidence"], json.dumps(d.get("bbox")))
+        (
+            event_id,
+            d["class"],
+            d["confidence"],
+            json.dumps(d.get("bbox")),
+            d.get("instance", 0),
+        )
         for d in detections
     ]
     with _conn() as c:
         c.executemany(
-            "INSERT INTO detections (event_id, class_name, confidence, bbox) "
-            "VALUES (?, ?, ?, ?)",
+            "INSERT INTO detections (event_id, class_name, confidence, bbox, instance) "
+            "VALUES (?, ?, ?, ?, ?)",
             rows,
         )
 
 
-# ── Read ───────────────────────────────────────────────────────────
+# ── Events: read ─────────────────────────────────────────────────
 
 def get_recent_events(
     camera_id: Optional[str] = None,
@@ -125,13 +155,29 @@ def get_recent_events(
         return [dict(r) for r in c.execute(q, params)]
 
 
+def get_events_in_range(
+    ts_from: float,
+    ts_to: float,
+    camera_id: Optional[str] = None,
+) -> list[dict]:
+    q = "SELECT id, camera_id, ts FROM events WHERE ts >= ? AND ts <= ?"
+    params: list = [ts_from, ts_to]
+    if camera_id:
+        q += " AND camera_id = ?"
+        params.append(camera_id)
+    with _conn() as c:
+        return [dict(r) for r in c.execute(q, params)]
+
+
 def get_hourly_heatmap(
     camera_id: Optional[str] = None,
     weeks: int = 5,
 ) -> list[dict]:
-    """Event counts by (day_of_week × hour) over the last N weeks."""
     import time
-    cutoff = time.time() - weeks * 7 * 86400
+    if weeks == 0:
+        cutoff = time.time() - 86400   # last 24h
+    else:
+        cutoff = time.time() - weeks * 7 * 86400
     q = "SELECT day_of_week, hour, COUNT(*) AS count FROM events WHERE ts >= ?"
     params: list = [cutoff]
     if camera_id:
@@ -146,9 +192,11 @@ def get_detection_summary(
     camera_id: Optional[str] = None,
     weeks: int = 5,
 ) -> list[dict]:
-    """Top detected classes with counts and average confidence."""
     import time
-    cutoff = time.time() - weeks * 7 * 86400
+    if weeks == 0:
+        cutoff = time.time() - 86400
+    else:
+        cutoff = time.time() - weeks * 7 * 86400
     q = (
         "SELECT d.class_name, COUNT(*) AS count, "
         "ROUND(AVG(d.confidence), 3) AS avg_conf "
@@ -165,7 +213,7 @@ def get_detection_summary(
         return [dict(r) for r in c.execute(q, params)]
 
 
-# ── Profile write ──────────────────────────────────────────────────
+# ── Profiles: write ───────────────────────────────────────────────
 
 def create_profile(
     cam_id: str,
@@ -173,7 +221,6 @@ def create_profile(
     embedding: list[float],
     thumb_bytes: Optional[bytes] = None,
 ) -> int:
-    """Create a new profile for an unrecognised person. Returns new profile id."""
     with _conn() as c:
         cur = c.execute(
             "INSERT INTO profiles (first_seen, last_seen, sightings, cameras, embedding, thumb) "
@@ -195,19 +242,17 @@ def update_profile_sighting(
     new_embedding: list[float],
     event_id: Optional[int] = None,
 ) -> None:
-    """Record a new sighting for an existing profile and update rolling embedding."""
     with _conn() as c:
         row = c.execute(
             "SELECT cameras FROM profiles WHERE id = ?", (profile_id,)
         ).fetchone()
-        cameras: list[str] = json.loads(row["cameras"]) if row else []
-        if cam_id not in cameras:
-            cameras.append(cam_id)
-
+        cameras_list: list[str] = json.loads(row["cameras"]) if row else []
+        if cam_id not in cameras_list:
+            cameras_list.append(cam_id)
         c.execute(
             "UPDATE profiles SET last_seen = ?, sightings = sightings + 1, "
             "cameras = ?, embedding = ? WHERE id = ?",
-            (ts, json.dumps(cameras), json.dumps(new_embedding), profile_id),
+            (ts, json.dumps(cameras_list), json.dumps(new_embedding), profile_id),
         )
         c.execute(
             "INSERT INTO profile_sightings (profile_id, ts, cam_id, event_id) "
@@ -216,7 +261,49 @@ def update_profile_sighting(
         )
 
 
-# ── Profile read ───────────────────────────────────────────────────
+def set_profile_label(profile_id: int, label: str) -> bool:
+    """Persist a human-readable custom name for a profile. Returns success."""
+    with _conn() as c:
+        c.execute("UPDATE profiles SET label = ? WHERE id = ?", (label, profile_id))
+        return c.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def merge_profiles(
+    keep_id: int,
+    drop_id: int,
+    merged_cameras: list[str],
+    merged_embedding: list[float],
+) -> None:
+    """
+    Merge drop_id into keep_id:
+      - Reassign all profile_sightings rows from drop_id to keep_id
+      - Add drop's sightings count to keep
+      - Update cameras + embedding on keep
+      - Delete drop profile
+    """
+    with _conn() as c:
+        # Reassign sightings
+        c.execute(
+            "UPDATE profile_sightings SET profile_id = ? WHERE profile_id = ?",
+            (keep_id, drop_id),
+        )
+        # Get sightings counts
+        drop_row = c.execute(
+            "SELECT sightings FROM profiles WHERE id = ?", (drop_id,)
+        ).fetchone()
+        drop_count = drop_row["sightings"] if drop_row else 0
+        # Merge onto keep
+        c.execute(
+            "UPDATE profiles SET "
+            "sightings = sightings + ?, cameras = ?, embedding = ? "
+            "WHERE id = ?",
+            (drop_count, json.dumps(merged_cameras), json.dumps(merged_embedding), keep_id),
+        )
+        # Remove the merged profile
+        c.execute("DELETE FROM profiles WHERE id = ?", (drop_id,))
+
+
+# ── Profiles: read ────────────────────────────────────────────────
 
 def get_all_profiles() -> list[dict]:
     with _conn() as c:
@@ -250,3 +337,35 @@ def get_profile_sightings(profile_id: int) -> list[dict]:
             "WHERE profile_id = ? ORDER BY ts DESC",
             (profile_id,),
         )]
+
+
+# ── Intel alerts ──────────────────────────────────────────────────
+
+def insert_alert(
+    type_: str,
+    severity: str,
+    message: str,
+    camera_id: Optional[str],
+    ts: float,
+) -> int:
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO intel_alerts (type, severity, message, camera_id, ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (type_, severity, message, camera_id, ts),
+        )
+        return cur.lastrowid
+
+
+def get_alerts(limit: int = 20, unread_only: bool = False) -> list[dict]:
+    q = "SELECT * FROM intel_alerts"
+    if unread_only:
+        q += " WHERE read = 0"
+    q += " ORDER BY ts DESC LIMIT ?"
+    with _conn() as c:
+        return [dict(r) for r in c.execute(q, (limit,))]
+
+
+def mark_alert_read(alert_id: int) -> None:
+    with _conn() as c:
+        c.execute("UPDATE intel_alerts SET read = 1 WHERE id = ?", (alert_id,))

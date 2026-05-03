@@ -466,6 +466,171 @@
       font-weight: 700;
     }
     .det-profile.regular { color: var(--green); border-color: var(--green-dim); background: rgba(0,212,106,0.12); }
+
+    /* ── SCENE SUMMARY TICKER ── */
+    .scene-summary {
+      position: absolute;
+      bottom: 26px; left: 0; right: 0;
+      padding: 4px 8px;
+      background: rgba(0,0,0,0.7);
+      font-size: 8px;
+      letter-spacing: 1.2px;
+      color: var(--cyan);
+      z-index: 8;
+      pointer-events: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── INTEL ALERTS ── */
+    .alert-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+      line-height: 1.5;
+    }
+    .alert-row:last-child { border-bottom: none; }
+    .alert-sev {
+      font-size: 7px;
+      letter-spacing: 1px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      flex-shrink: 0;
+      min-width: 38px;
+      text-align: center;
+      font-weight: 700;
+    }
+    .alert-sev.high { background: rgba(255,59,59,0.15); color: var(--red);    border: 1px solid #5a0000; }
+    .alert-sev.warn { background: rgba(245,196,0,0.1);  color: var(--yellow); border: 1px solid #3d3000; }
+    .alert-sev.info { background: rgba(0,184,217,0.1);  color: var(--cyan);   border: 1px solid #0d3a45; }
+    .alert-msg  { flex: 1; color: var(--text); }
+    .alert-cam  { color: var(--dim); font-size: 8px; white-space: nowrap; }
+
+    /* ── INTEL BRIEFING ── */
+    .briefing-section { margin-bottom: 16px; }
+    .briefing-heading {
+      font-size: 7px;
+      letter-spacing: 2px;
+      color: var(--cyan);
+      margin-bottom: 6px;
+    }
+    .intel-line {
+      font-size: 9px;
+      color: var(--text);
+      letter-spacing: 1px;
+      line-height: 1.9;
+      padding: 2px 0;
+    }
+    .intel-line::before { content: '▸ '; color: var(--green); }
+    .briefing-stat {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+    }
+    .briefing-stat-label { color: var(--dim); letter-spacing: 1px; }
+    .briefing-stat-val   { color: var(--text); font-weight: 700; }
+    .briefing-stat-val.rising  { color: var(--red); }
+    .briefing-stat-val.falling { color: var(--cyan); }
+    .briefing-stat-val.stable  { color: var(--text); }
+
+    /* ── VELOCITY WIDGET (footer) ── */
+    .vel-widget {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 8px;
+      color: var(--dim);
+      letter-spacing: 1px;
+    }
+    .vel-trend { font-weight: 700; }
+    .vel-trend.rising  { color: var(--red);    }
+    .vel-trend.falling { color: var(--cyan);   }
+    .vel-trend.stable  { color: var(--text);   }
+
+    /* ── CAMERA COMPARISON ── */
+    .cam-comp-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+    }
+    .cam-comp-name { color: var(--cyan); min-width: 90px; letter-spacing: 1px; }
+    .cam-comp-bar-wrap { flex: 1; height: 5px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+    .cam-comp-bar { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.4s; }
+    .cam-comp-count { color: var(--dim); font-size: 8px; min-width: 40px; text-align: right; }
+    .cam-comp-top   { color: var(--dim); font-size: 7px; min-width: 50px; letter-spacing: 0.5px; }
+
+    /* ── SCHEDULE GRID ── */
+    .sched-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 4px 0; border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+    }
+    .sched-day  { color: var(--cyan); min-width: 30px; letter-spacing: 1px; }
+    .sched-time { color: var(--text); min-width: 40px; }
+    .sched-count{ color: var(--dim);  font-size: 8px; }
+    .sched-int-bar { flex: 1; height: 4px; background: var(--border2); border-radius: 2px; overflow: hidden; }
+    .sched-int-fill { height: 100%; background: var(--green); border-radius: 2px; opacity: 0.7; }
+
+    /* ── ANOMALY PINS ── */
+    .anomaly-row {
+      display: flex; gap: 8px; align-items: center;
+      padding: 5px 0; border-bottom: 1px solid var(--border2);
+      font-size: 9px;
+    }
+    .anomaly-pin { font-size: 10px; color: var(--red); }
+    .anomaly-day  { color: var(--text); min-width: 30px; }
+    .anomaly-time { color: var(--dim);  min-width: 40px; }
+    .anomaly-z    { color: var(--red);  font-size: 8px; min-width: 50px; }
+    .anomaly-count{ color: var(--dim);  font-size: 8px; }
+
+    /* ── PROFILE RENAME ── */
+    .profile-rename {
+      display: flex; gap: 4px; margin-top: 6px;
+    }
+    .profile-rename input {
+      flex: 1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 6px;
+      border-radius: 2px;
+      letter-spacing: 1px;
+    }
+    .profile-rename input:focus { outline: none; border-color: var(--cyan); }
+    .profile-rename button {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7px;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--dim);
+      padding: 3px 8px;
+      border-radius: 2px;
+      cursor: pointer;
+      letter-spacing: 1px;
+    }
+    .profile-rename button:hover { border-color: var(--green); color: var(--green); }
+
+    /* ── CROSS-CAMERA TIMELINE ── */
+    .timeline-row {
+      display: flex; gap: 10px; align-items: center;
+      padding: 4px 0; font-size: 8px;
+      border-bottom: 1px solid var(--border2);
+    }
+    .tl-time { color: var(--cyan); min-width: 60px; letter-spacing: 0.5px; }
+    .tl-day  { color: var(--dim);  min-width: 70px; }
+    .tl-cam  { color: var(--green); letter-spacing: 1px; }
   </style>
 </head>
 <body>
@@ -556,6 +721,18 @@
       5-WEEK TRENDS
       <span class="cb-sub">HEATMAP · SCHEDULES</span>
     </button>
+    <button class="city-btn" onclick="openAIPanel('briefing')">
+      INTEL BRIEFING
+      <span class="cb-sub" id="sb-briefing-sub">24H SUMMARY</span>
+    </button>
+    <button class="city-btn" onclick="openAIPanel('alerts')">
+      ALERTS
+      <span class="cb-sub" id="sb-alert-count">CHECKING...</span>
+    </button>
+    <button class="city-btn" onclick="openAIPanel('profiles')">
+      PERSONS
+      <span class="cb-sub" id="sb-profile-count">LOADING...</span>
+    </button>
 
     <div class="sb-spacer"></div>
     <div class="sb-bottom">
@@ -576,6 +753,7 @@
       <div class="tile-body" style="position:relative;">
         <iframe src="/go2rtc/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
         <div class="tile-badge badge-live">LIVE</div>
+        <div class="scene-summary" id="front-summary" style="display:none"></div>
         <div id="front-det-bar"></div>
       </div>
     </div>
@@ -600,6 +778,7 @@
         </div>
         <div id="bell-age" style="display:none;position:absolute;bottom:28px;left:8px;font-size:7px;letter-spacing:1px;color:rgba(255,255,255,0.7);background:rgba(0,0,0,0.6);padding:2px 6px;border-radius:2px;z-index:6;"></div>
         <div class="tile-badge" id="bell-badge" style="display:none"></div>
+        <div class="scene-summary" id="bell-summary" style="display:none"></div>
         <div id="det-bar"></div>
       </div>
     </div>
@@ -688,8 +867,10 @@
   </div>
   <div id="ai-tabs">
     <button class="ai-tab active" id="tab-events"   onclick="switchAITab('events')">EVENT LOG</button>
-    <button class="ai-tab"        id="tab-profiles" onclick="switchAITab('profiles')">PROFILES</button>
+    <button class="ai-tab"        id="tab-profiles" onclick="switchAITab('profiles')">PERSONS</button>
     <button class="ai-tab"        id="tab-trends"   onclick="switchAITab('trends')">5-WEEK TRENDS</button>
+    <button class="ai-tab"        id="tab-briefing" onclick="switchAITab('briefing')">BRIEFING</button>
+    <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -706,6 +887,7 @@
   <div class="footer-right">
     <div class="f-stat">FRONT &nbsp;<span id="fs-front">--</span></div>
     <div class="f-stat">DOORBELL &nbsp;<span id="fs-bell">--</span></div>
+    <div class="vel-widget">TREND &nbsp;<span class="vel-trend" id="fs-velocity">--</span></div>
     <div class="f-stat">ROTATE &nbsp;<span id="fs-rot-count">0</span></div>
     <div class="f-stat">UPTIME &nbsp;<span id="fs-uptime">00:00:00</span></div>
     <button class="rot-global-btn active" id="rot-toggle" onclick="toggleAutoRotate()">AUTO ■</button>
@@ -1163,6 +1345,13 @@ async function refreshDoorbell() {
       // ── AI detections ────────────────────────────────────────
       renderDetBar(document.getElementById('det-bar'), data.detections, data.profiles);
 
+      // ── Scene summary ticker ──────────────────────────────────
+      const summEl = document.getElementById('bell-summary');
+      if (summEl && data.summary) {
+        summEl.textContent = data.summary;
+        summEl.style.display = 'block';
+      }
+
       // ── Show annotated snap when available ───────────────────
       if (data.has_snap) {
         const snapSrc = data.has_snap_ann
@@ -1242,10 +1431,26 @@ async function refreshFrontCam() {
     renderDetBar(document.getElementById('front-det-bar'), data.detections, data.profiles);
     const meta = document.getElementById('front-meta');
     if (meta && data.detections && data.detections.length) {
-      meta.textContent = 'AI · ' + data.detections.map(d =>
-        d.class.toUpperCase()).join(' · ');
+      // Show multi-instance label: "PERSON·2 · CAR" if multiple of same class
+      const counts = {};
+      const labels = [];
+      for (const d of (data.detections || [])) {
+        counts[d.class] = (counts[d.class] || 0) + 1;
+      }
+      for (const [cls, cnt] of Object.entries(counts)) {
+        labels.push(cnt > 1 ? `${cls.toUpperCase()}·${cnt}` : cls.toUpperCase());
+      }
+      meta.textContent = 'AI · ' + labels.join(' · ');
     } else if (meta) {
       meta.textContent = 'TAPO · RTSP · go2rtc';
+    }
+    // Scene summary ticker
+    const summEl = document.getElementById('front-summary');
+    if (summEl && data.summary) {
+      summEl.textContent = data.summary;
+      summEl.style.display = 'block';
+    } else if (summEl) {
+      summEl.style.display = 'none';
     }
   } catch { /* watcher offline — silently skip */ }
 }
@@ -1270,10 +1475,13 @@ function closeAIPanel() {
 function switchAITab(tab) {
   aiCurrentTab = tab;
   document.querySelectorAll('.ai-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(`tab-${tab}`).classList.add('active');
-  if (tab === 'events')   loadEventLog();
+  const tabEl = document.getElementById(`tab-${tab}`);
+  if (tabEl) tabEl.classList.add('active');
+  if (tab === 'events')        loadEventLog();
   else if (tab === 'profiles') loadProfiles();
   else if (tab === 'trends')   loadTrends();
+  else if (tab === 'briefing') loadBriefing();
+  else if (tab === 'alerts')   loadAlerts();
 }
 
 async function loadProfiles() {
@@ -1282,13 +1490,17 @@ async function loadProfiles() {
   try {
     const res      = await fetch('/api/profiles');
     const profiles = await res.json();
+    document.getElementById('sb-profile-count').textContent = profiles.length + ' KNOWN';
     if (!profiles.length) {
       body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO PROFILES YET — person detections build profiles over time</div>';
       return;
     }
-    const regulars = profiles.filter(p => p.is_regular).length;
+    const regulars  = profiles.filter(p => p.is_regular).length;
+    const returning = profiles.filter(p => p.returning_today).length;
+    const newToday  = profiles.filter(p => p.first_seen_today).length;
     let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:12px;">
-      ${profiles.length} PROFILES KNOWN · ${regulars} REGULAR${regulars !== 1 ? 'S' : ''}
+      ${profiles.length} PROFILES &nbsp;·&nbsp; ${regulars} REGULAR &nbsp;·&nbsp;
+      ${returning} RETURNING TODAY &nbsp;·&nbsp; ${newToday} NEW TODAY
     </div>`;
     html += profiles.map(p => {
       const isReg     = p.is_regular;
@@ -1308,23 +1520,78 @@ async function loadProfiles() {
           habitHtml += `USUALLY: ${habits.peak_days.join(' · ')}`;
         if (habits.window)
           habitHtml += ` · ${habits.window}`;
+        if (habits.visits_last_7d !== undefined)
+          habitHtml += ` · ${habits.visits_last_7d} VISITS/7D`;
         habitHtml += `</div>`;
       }
+      const badges = [];
+      if (p.returning_today)  badges.push(`<span class="det-tag det-person" style="font-size:7px">↩ RETURNING</span>`);
+      if (p.first_seen_today) badges.push(`<span class="det-tag" style="font-size:7px;background:rgba(245,196,0,0.1);color:var(--yellow);border:1px solid #3d3000">★ NEW TODAY</span>`);
       return `<div class="profile-card">
         ${thumbEl}
         <div class="profile-info">
           <div class="profile-label ${labelCls}">${p.label}${isReg ? ' ●' : ' ○'}</div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">${badges.join('')}</div>
           <div class="profile-stat">SEEN: <span>${p.sightings}×</span></div>
           <div class="profile-stat">FIRST: <span>${fmtDate(firstDt)}</span></div>
           <div class="profile-stat">LAST:  <span>${fmtDate(lastDt)}</span></div>
           <div class="profile-stat">CAMS:  <span>${cams}</span></div>
           ${habitHtml}
+          <div class="profile-rename">
+            <input type="text" id="rename-${p.id}" placeholder="Custom name…" value="">
+            <button onclick="renameProfile(${p.id})">SAVE</button>
+            <button onclick="loadTimeline(${p.id})" style="border-color:var(--cyan);color:var(--cyan);">TIMELINE</button>
+          </div>
         </div>
       </div>`;
     }).join('');
     body.innerHTML = html;
   } catch {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function renameProfile(pid) {
+  const input = document.getElementById(`rename-${pid}`);
+  if (!input) return;
+  const label = input.value.trim();
+  if (!label) return;
+  try {
+    await fetch(`/api/profile/${pid}/label`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({label}),
+    });
+    input.value = '';
+    loadProfiles();
+  } catch (e) {
+    console.warn('rename failed', e);
+  }
+}
+
+async function loadTimeline(pid) {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING TIMELINE...</div>';
+  try {
+    const res  = await fetch(`/api/profile/${pid}/timeline?limit=30`);
+    const rows = await res.json();
+    if (!rows.length) {
+      body.innerHTML = `<div style="color:var(--dim);padding:20px;font-size:9px;">NO SIGHTINGS YET FOR PROFILE-${String(pid).padStart(3,'0')}</div>`;
+      return;
+    }
+    let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:12px;">
+      CROSS-CAMERA TIMELINE · ${rows[0].label} · ${rows.length} SIGHTINGS
+      <button onclick="loadProfiles()" style="float:right;font-family:inherit;font-size:7px;background:transparent;border:1px solid var(--border);color:var(--dim);padding:2px 8px;border-radius:2px;cursor:pointer;letter-spacing:1px;">← BACK</button>
+    </div>`;
+    html += rows.map(r => `
+      <div class="timeline-row">
+        <span class="tl-time">${r.time_str}</span>
+        <span class="tl-day">${r.day_str}</span>
+        <span class="tl-cam">${(r.cam_id || '').toUpperCase()}</span>
+      </div>`).join('');
+    body.innerHTML = html;
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;">WATCHER OFFLINE</div>';
   }
 }
 
@@ -1376,22 +1643,20 @@ async function loadTrends() {
     const res  = await fetch('/api/trends?weeks=5');
     const data = await res.json();
 
-    // Heatmap
     const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+
+    // ── Heatmap ──────────────────────────────────────────────────
     const hm = {};
     let maxCount = 1;
     for (const row of (data.heatmap || [])) {
       hm[`${row.day_of_week}_${row.hour}`] = row.count;
       if (row.count > maxCount) maxCount = row.count;
     }
-
     let heatHtml = '<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">ACTIVITY HEATMAP · LAST 5 WEEKS</div>';
     heatHtml += '<div id="trend-grid">';
-    // Hour labels row
     heatHtml += '<div class="tg-label"></div>';
     for (let h = 0; h < 24; h++)
       heatHtml += `<div class="tg-hour-label tg-label">${h}</div>`;
-    // Day rows
     for (let d = 0; d < 7; d++) {
       heatHtml += `<div class="tg-label">${days[d]}</div>`;
       for (let h = 0; h < 24; h++) {
@@ -1401,13 +1666,82 @@ async function loadTrends() {
         const color = pct > 60 ? `rgba(0,212,106,${alpha})`
           : pct > 20 ? `rgba(0,184,217,${alpha})`
           : `rgba(255,255,255,${alpha})`;
-        const title = c ? `${days[d]} ${h}:00 — ${c} events` : '';
-        heatHtml += `<div class="tg-cell" style="background:${color}" title="${title}"></div>`;
+        heatHtml += `<div class="tg-cell" style="background:${color}" title="${c ? days[d]+' '+h+':00 — '+c+' events' : ''}"></div>`;
       }
     }
     heatHtml += '</div>';
 
-    // Detection summary
+    // ── Velocity ─────────────────────────────────────────────────
+    const vel = data.velocity || {};
+    const trendArrow = vel.trend === 'rising' ? '▲' : vel.trend === 'falling' ? '▼' : '─';
+    const trendColor = vel.trend === 'rising' ? 'var(--red)' : vel.trend === 'falling' ? 'var(--cyan)' : 'var(--text)';
+    let velHtml = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">EVENT VELOCITY</div>
+    <div style="display:flex;gap:24px;margin-bottom:8px;">
+      <div class="briefing-stat" style="flex:1">
+        <span class="briefing-stat-label">THIS WEEK</span>
+        <span class="briefing-stat-val">${vel.this_week_count || 0} (${vel.this_week_daily || 0}/day)</span>
+      </div>
+      <div class="briefing-stat" style="flex:1">
+        <span class="briefing-stat-label">LAST WEEK</span>
+        <span class="briefing-stat-val">${vel.last_week_count || 0} (${vel.last_week_daily || 0}/day)</span>
+      </div>
+      <div class="briefing-stat" style="flex:1">
+        <span class="briefing-stat-label">TREND</span>
+        <span class="briefing-stat-val" style="color:${trendColor}">${trendArrow} ${vel.delta_pct > 0 ? '+' : ''}${vel.delta_pct || 0}%</span>
+      </div>
+    </div>`;
+
+    // ── Schedule ──────────────────────────────────────────────────
+    const sched = data.schedule || [];
+    let schedHtml = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">RECURRING SCHEDULE (PEAK HOURS)</div>`;
+    if (!sched.length) {
+      schedHtml += '<div style="color:var(--dim);font-size:9px;padding:4px 0;">No schedule inferred yet — builds over 1+ week of data</div>';
+    } else {
+      schedHtml += sched.slice(0, 12).map(s => {
+        const intPct = Math.min(100, Math.round(s.intensity * 40));
+        return `<div class="sched-row">
+          <span class="sched-day">${s.day}</span>
+          <span class="sched-time">${s.label}</span>
+          <div class="sched-int-bar"><div class="sched-int-fill" style="width:${intPct}%"></div></div>
+          <span class="sched-count">${s.count} events</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Anomalies ─────────────────────────────────────────────────
+    const anom = data.anomalies || [];
+    let anomHtml = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">PINNED ANOMALIES (Z>2σ)</div>`;
+    if (!anom.length) {
+      anomHtml += '<div style="color:var(--dim);font-size:9px;padding:4px 0;">No anomalies detected</div>';
+    } else {
+      anomHtml += anom.slice(0, 5).map(a => `
+        <div class="anomaly-row">
+          <span class="anomaly-pin">⚡</span>
+          <span class="anomaly-day">${a.day}</span>
+          <span class="anomaly-time">${a.label}</span>
+          <span class="anomaly-z">z=${a.z_score}</span>
+          <span class="anomaly-count">${a.count} events</span>
+        </div>`).join('');
+    }
+
+    // ── Camera comparison ─────────────────────────────────────────
+    const camComp = data.camera_comparison || [];
+    let camHtml = '';
+    if (camComp.length) {
+      const maxEvt = camComp[0].events_7d || 1;
+      camHtml = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">CAMERA COMPARISON (7 DAYS)</div>`;
+      camHtml += camComp.map(c => {
+        const w = Math.round((c.events_7d / maxEvt) * 100);
+        return `<div class="cam-comp-row">
+          <span class="cam-comp-name">${(c.camera_id||'').toUpperCase()}</span>
+          <div class="cam-comp-bar-wrap"><div class="cam-comp-bar" style="width:${w}%"></div></div>
+          <span class="cam-comp-count">${c.events_7d}</span>
+          <span class="cam-comp-top">${c.top_class ? c.top_class.toUpperCase() : ''}</span>
+        </div>`;
+      }).join('');
+    }
+
+    // ── Detection summary ─────────────────────────────────────────
     let detHtml = '<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin:16px 0 8px;">DETECTION SUMMARY</div>';
     detHtml += '<div id="trend-det-list">';
     const dets = data.detections || [];
@@ -1426,11 +1760,140 @@ async function loadTrends() {
     }
     detHtml += '</div>';
 
-    body.innerHTML = heatHtml + detHtml;
+    body.innerHTML = heatHtml + velHtml + schedHtml + anomHtml + camHtml + detHtml;
   } catch {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
   }
 }
+
+async function loadBriefing() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
+  try {
+    const res  = await fetch('/api/intel/briefing');
+    const data = await res.json();
+
+    // Intel lines
+    const linesHtml = (data.intel_lines || []).map(l =>
+      `<div class="intel-line">${l}</div>`).join('') ||
+      '<div style="color:var(--dim);font-size:9px;">No intel yet</div>';
+
+    // Stats grid
+    const statsHtml = `
+      <div class="briefing-stat">
+        <span class="briefing-stat-label">PERIOD</span>
+        <span class="briefing-stat-val">${data.period_start ? new Date(data.period_start).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true}) : '—'}</span>
+      </div>
+      <div class="briefing-stat">
+        <span class="briefing-stat-label">TOTAL EVENTS</span>
+        <span class="briefing-stat-val">${data.total_events || 0}</span>
+      </div>
+      <div class="briefing-stat">
+        <span class="briefing-stat-label">CAMERAS ACTIVE</span>
+        <span class="briefing-stat-val">${(data.unique_cameras || []).join(', ').toUpperCase() || '—'}</span>
+      </div>
+      <div class="briefing-stat">
+        <span class="briefing-stat-label">PERSONS SEEN</span>
+        <span class="briefing-stat-val">${(data.persons_seen || []).length}</span>
+      </div>
+      <div class="briefing-stat">
+        <span class="briefing-stat-label">NEW PROFILES</span>
+        <span class="briefing-stat-val">${(data.new_profiles || []).length}</span>
+      </div>`;
+
+    // Persons seen list
+    const persons = data.persons_seen || [];
+    const personsHtml = persons.length ? persons.map(p => {
+      const clr = p.is_regular ? 'var(--green)' : 'var(--dim)';
+      return `<span style="color:${clr};font-size:8px;letter-spacing:1px;margin-right:10px;">${p.label}</span>`;
+    }).join('') : '<span style="color:var(--dim);font-size:8px;">none</span>';
+
+    // Anomalies
+    const anom = data.anomalies || [];
+    const anomHtml = anom.length ? anom.slice(0,3).map(a =>
+      `<div class="anomaly-row">
+        <span class="anomaly-pin">⚡</span>
+        <span class="anomaly-day">${a.day}</span>
+        <span class="anomaly-time">${a.label}</span>
+        <span class="anomaly-z">z=${a.z_score}</span>
+        <span class="anomaly-count">${a.count} events</span>
+      </div>`).join('') : '<div style="color:var(--dim);font-size:9px;">No anomalies</div>';
+
+    body.innerHTML = `
+      <div class="briefing-section">
+        <div class="briefing-heading">INTELLIGENCE SUMMARY · LAST 24H</div>
+        ${linesHtml}
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-heading">STATISTICS</div>
+        ${statsHtml}
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-heading">PERSONS DETECTED</div>
+        <div style="padding:8px 0;line-height:2;">${personsHtml}</div>
+      </div>
+      <div class="briefing-section">
+        <div class="briefing-heading">TOP ANOMALIES</div>
+        ${anomHtml}
+      </div>`;
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function loadAlerts() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
+  try {
+    const res    = await fetch('/api/intel/alerts');
+    const alerts = await res.json();
+    const sevEl  = document.getElementById('sb-alert-count');
+
+    const high = alerts.filter(a => a.severity === 'high').length;
+    const warn = alerts.filter(a => a.severity === 'warn').length;
+    if (sevEl) {
+      if (high) sevEl.textContent = `${high} HIGH`;
+      else if (warn) sevEl.textContent = `${warn} WARN`;
+      else sevEl.textContent = 'ALL CLEAR';
+      sevEl.style.color = high ? 'var(--red)' : warn ? 'var(--yellow)' : 'var(--dim)';
+    }
+
+    if (!alerts.length) {
+      body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">ALL CLEAR · No active alerts</div>';
+      return;
+    }
+
+    let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:12px;">${alerts.length} ACTIVE ALERT${alerts.length !== 1 ? 'S' : ''}</div>`;
+    html += alerts.map(a => {
+      const dt   = new Date(a.ts * 1000);
+      const time = dt.toLocaleString('en-US', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:true});
+      return `<div class="alert-row">
+        <span class="alert-sev ${a.severity}">${a.severity.toUpperCase()}</span>
+        <span class="alert-msg">${a.message}</span>
+        <span class="alert-cam">${(a.camera_id || 'ALL').toUpperCase()}</span>
+      </div>`;
+    }).join('');
+    body.innerHTML = html;
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function refreshVelocity() {
+  try {
+    const res = await fetch('/api/intel/velocity');
+    if (!res.ok) return;
+    const data = await res.json();
+    const el   = document.getElementById('fs-velocity');
+    if (!el || data.delta_pct === undefined) return;
+    const arrow = data.trend === 'rising' ? '▲' : data.trend === 'falling' ? '▼' : '─';
+    const pct   = typeof data.delta_pct === 'number' ? data.delta_pct : 0;
+    el.textContent = `${arrow} ${pct > 0 ? '+' : ''}${pct}%`;
+    el.className = `vel-trend ${data.trend || 'stable'}`;
+  } catch { /* watcher offline — leave as -- */ }
+}
+setInterval(refreshVelocity, 60000);
+refreshVelocity();
 
 // ── INIT ─────────────────────────────────────────────────────────
 // Stagger starting cam indices so tiles show different cams on load
