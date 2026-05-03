@@ -93,10 +93,12 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body   = self.rfile.read(length) if length else b""
         ct     = self.headers.get("Content-Type", "application/json")
+        # scan endpoints can take longer (EasyOCR / face model init)
+        timeout = 90 if "/scan/" in path else 15
         try:
             req = urllib.request.Request(target, data=body, method=method)
             req.add_header("Content-Type", ct)
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
                 resp_body = resp.read()
                 self.send_response(resp.status)
                 for key, val in resp.headers.items():

@@ -1220,6 +1220,15 @@ async def main() -> None:
     traffic_cam.start_background_refresh()
     print("[watcher] Neighborhood overwatch started", flush=True)
 
+    # Pre-warm EasyOCR so first field scan doesn't time out
+    def _prewarm_ocr():
+        try:
+            lpr_engine._init_ocr()
+            print("[watcher] EasyOCR pre-warmed", flush=True)
+        except Exception as e:
+            print(f"[watcher] EasyOCR pre-warm skipped: {e}", flush=True)
+    threading.Thread(target=_prewarm_ocr, daemon=True).start()
+
     # Initialize pattern-of-life engine
     try:
         pattern_engine.get_engine().build()
