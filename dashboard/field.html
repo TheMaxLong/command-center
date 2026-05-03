@@ -691,6 +691,25 @@ function renderResult(type, data) {
         </div>
       </div>`;
     }
+
+    // Watchlist action button — only show if plate was read
+    if (data.plate) {
+      const plate = data.plate;
+      const alreadyWatched = hit;
+      rows += `<div style="padding:12px 0 4px">
+        ${alreadyWatched
+          ? `<button onclick="removeFromWatchlist('${esc(plate)}')" id="wl-btn"
+               style="width:100%;padding:12px;background:rgba(255,59,92,0.12);border:1px solid rgba(255,59,92,0.4);border-radius:10px;color:var(--danger);font-size:13px;font-weight:700;letter-spacing:.05em;cursor:pointer;">
+               🗑 REMOVE FROM WATCHLIST
+             </button>`
+          : `<button onclick="addToWatchlist('${esc(plate)}')" id="wl-btn"
+               style="width:100%;padding:12px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);border-radius:10px;color:var(--accent);font-size:13px;font-weight:700;letter-spacing:.05em;cursor:pointer;">
+               + FLAG THIS PLATE
+             </button>`
+        }
+      </div>`;
+    }
+
     rows += '</div>';
     body.innerHTML = rows;
 
@@ -734,6 +753,61 @@ function renderError(msg) {
         <div class="result-row-value" style="font-size:13px;color:var(--muted)">${esc(msg)}</div>
       </div>
     </div>`;
+}
+
+async function addToWatchlist(plate) {
+  const btn = document.getElementById('wl-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Adding…'; }
+  try {
+    const res = await fetch('/api/watchlist/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ plate, label: 'FLAGGED' })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      if (btn) {
+        btn.textContent = '✓ FLAGGED';
+        btn.style.background = 'rgba(255,59,92,0.12)';
+        btn.style.borderColor = 'rgba(255,59,92,0.4)';
+        btn.style.color = 'var(--danger)';
+        btn.onclick = () => removeFromWatchlist(plate);
+        btn.id = 'wl-btn';
+        btn.disabled = false;
+      }
+    } else {
+      if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
+  }
+}
+
+async function removeFromWatchlist(plate) {
+  const btn = document.getElementById('wl-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Removing…'; }
+  try {
+    const res = await fetch('/api/watchlist/remove', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ plate })
+    });
+    const d = await res.json();
+    if (d.ok) {
+      if (btn) {
+        btn.textContent = '+ FLAG THIS PLATE';
+        btn.style.background = 'rgba(0,212,255,0.1)';
+        btn.style.borderColor = 'rgba(0,212,255,0.3)';
+        btn.style.color = 'var(--accent)';
+        btn.onclick = () => addToWatchlist(plate);
+        btn.disabled = false;
+      }
+    } else {
+      if (btn) { btn.textContent = 'Error'; btn.disabled = false; }
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
+  }
 }
 
 function closeResultCard() {

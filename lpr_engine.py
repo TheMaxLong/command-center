@@ -65,6 +65,13 @@ def add_watched_plate(plate: str, label: str = "FLAGGED"):
         _known_plates[_normalize_plate(plate)] = label
 
 
+def remove_watched_plate(plate: str):
+    with _plates_lock:
+        p = _normalize_plate(plate)
+        _watched_plates.discard(p)
+        _known_plates.pop(p, None)
+
+
 def add_known_plate(plate: str, label: str):
     with _plates_lock:
         _known_plates[_normalize_plate(plate)] = label

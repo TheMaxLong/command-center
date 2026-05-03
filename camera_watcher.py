@@ -588,21 +588,32 @@ def _field_scan_plate(image_bytes: bytes) -> dict:
         if img is None:
             return {"plate": "", "confidence": 0.0}
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        candidates = lpr_engine._find_plate_candidates(gray)
-        if not candidates:
-            return {"plate": "", "confidence": 0.0}
+
         best, best_conf = "", 0.0
-        for (x, y, w, h) in candidates:
-            crop = gray[y:y+h, x:x+w]
+
+        def _try_ocr(crop):
+            nonlocal best, best_conf
             plate, conf = lpr_engine._ocr_region_opencv(crop)
             if conf > best_conf and lpr_engine._is_valid_plate(plate):
                 best, best_conf = lpr_engine._normalize_plate(plate), conf
+            plate, conf = lpr_engine._ocr_region_easyocr(crop)
+            if conf > best_conf and lpr_engine._is_valid_plate(plate):
+                best, best_conf = lpr_engine._normalize_plate(plate), conf
+
+        # Try contour-detected candidates first
+        candidates = lpr_engine._find_plate_candidates(gray)
+        for (x, y, w, h) in candidates:
+            _try_ocr(gray[y:y+h, x:x+w])
+
+        # Fallback: phone shot where plate fills the frame — OCR the full image
+        # and center-weighted crops (phone photos don't need contour detection)
         if not best:
-            for (x, y, w, h) in candidates:
-                crop = gray[y:y+h, x:x+w]
-                plate, conf = lpr_engine._ocr_region_easyocr(crop)
-                if conf > best_conf and lpr_engine._is_valid_plate(plate):
-                    best, best_conf = lpr_engine._normalize_plate(plate), conf
+            _try_ocr(gray)
+            h, w = gray.shape
+            # center 60% crop — plate usually centered in a deliberate phone shot
+            cy, cx = h // 2, w // 2
+            _try_ocr(gray[cy - h//3 : cy + h//3, cx - w//3 : cx + w//3])
+
         return {"plate": best, "confidence": round(best_conf, 3)}
     except Exception as e:
         return {"plate": "", "confidence": 0.0, "error": str(e)}
@@ -1069,6 +1080,33 @@ class Handler(BaseHTTPRequestHandler):
                                      timestamp=ts)
             result["timestamp"] = ts
             self._json(result)
+
+        # POST /watchlist/add  {"plate": "...", "label": "..."}
+        elif p == "/watchlist/add":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                data  = json.loads(self.rfile.read(length))
+                plate = lpr_engine._normalize_plate(str(data.get("plate", "")))
+                label = str(data.get("label", "FLAGGED"))[:48]
+            except Exception:
+                self.send_response(400); self.end_headers(); return
+            if not plate:
+                self._json({"ok": False, "error": "no plate"}); return
+            lpr_engine.add_watched_plate(plate, label)
+            self._json({"ok": True, "plate": plate, "label": label})
+
+        # POST /watchlist/remove  {"plate": "..."}
+        elif p == "/watchlist/remove":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                data  = json.loads(self.rfile.read(length))
+                plate = lpr_engine._normalize_plate(str(data.get("plate", "")))
+            except Exception:
+                self.send_response(400); self.end_headers(); return
+            if not plate:
+                self._json({"ok": False, "error": "no plate"}); return
+            lpr_engine.remove_watched_plate(plate)
+            self._json({"ok": True, "plate": plate})
 
         # POST /agent/query  {"text": "...", "camera": "..."}
         elif p == "/agent/query":
