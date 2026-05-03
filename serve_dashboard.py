@@ -12,7 +12,7 @@ from http.server import SimpleHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 DASHBOARD_DIR = Path(__file__).parent / "dashboard"
-SERVE_PORT = 5000
+SERVE_PORT = 8888
 WATCHER_URL = "http://localhost:8181"
 GO2RTC_URL = "http://localhost:1984"
 

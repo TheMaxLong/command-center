@@ -5,25 +5,19 @@ echo ""
 echo "  PALM COMMAND — startup"
 echo "  ─────────────────────────────"
 
-# Kill any leftover watcher or dashboard server
-pkill -f doorbell_watcher.py 2>/dev/null
-pkill -9 -f "http.server 8888" 2>/dev/null
+# Kill any leftover processes
+pkill -f "serve_dashboard.py" 2>/dev/null
+pkill -f "camera_watcher.py" 2>/dev/null
 sleep 1
 
-# Start go2rtc in Docker
-echo "  [1/3] Starting go2rtc streams..."
-docker compose up -d
+# Start go2rtc + vision-watcher in Docker
+echo "  [1/2] Starting Docker services..."
+docker compose up -d --build
 
-# Start doorbell watcher in background
-echo "  [2/3] Starting doorbell watcher..."
-python3.12 "$(dirname "$0")/doorbell_watcher.py" &
-WATCHER_PID=$!
-
-# Serve dashboard
-echo "  [3/3] Opening dashboard..."
-sleep 1
-python3 -m http.server 8888 --directory dashboard &
-HTTP_PID=$!
+# Start proxy/dashboard server (handles /api/ and /go2rtc/ proxying)
+echo "  [2/2] Starting dashboard server..."
+python3 "$(dirname "$0")/serve_dashboard.py" &
+DASH_PID=$!
 
 sleep 1
 open http://localhost:8888
@@ -31,10 +25,10 @@ open http://localhost:8888
 echo ""
 echo "  Dashboard  : http://localhost:8888"
 echo "  go2rtc UI  : http://localhost:1984"
-echo "  Doorbell   : http://localhost:8181/status"
+echo "  Camera API : http://localhost:8181/status"
 echo ""
 echo "  Press Ctrl+C to stop."
 echo ""
 
-trap "kill $HTTP_PID $WATCHER_PID 2>/dev/null; echo '  Stopped.'" EXIT
-wait $HTTP_PID
+trap "kill $DASH_PID 2>/dev/null; docker compose stop; echo '  Stopped.'" EXIT
+wait $DASH_PID

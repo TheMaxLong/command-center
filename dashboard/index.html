@@ -1140,7 +1140,7 @@
   <div class="footer-left">
     <span>PALM COMMAND v1.2</span>
     <span style="color:var(--border)">|</span>
-    <span>go2rtc · localhost:1984</span>
+    <span>go2rtc · <a href="/go2rtc/" target="_blank" style="color:inherit;text-decoration:none">:1984</a></span>
     <span style="color:var(--border)">|</span>
     <span id="footer-source">PUBLIC: CALTRANS I-10 · PALM SPRINGS / COACHELLA VALLEY</span>
   </div>
@@ -1574,7 +1574,7 @@ async function refreshDoorbell() {
         clip.style.display = 'block';
         age.style.display  = 'block';
         if (clip.dataset.event !== String(data.events)) {
-          clip.src = '/api/clip?t=' + t;
+          clip.src = `/api/clip/doorbell?t=${t}`;
           clip.dataset.event = String(data.events);
           clip.load(); clip.play().catch(()=>{});
         }
