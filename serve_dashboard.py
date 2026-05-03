@@ -30,9 +30,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         elif self.path.startswith("/go2rtc/"):
             self._proxy(GO2RTC_URL, self.path[7:])   # strip /go2rtc
         elif self.path.rstrip("/") == "/monitor" or self.path.startswith("/monitor?"):
-            # Serve dedicated monitor page
             monitor = DASHBOARD_DIR / "monitor.html"
             self._serve_file(monitor, "text/html")
+        elif self.path.rstrip("/") == "/mobile" or self.path.startswith("/mobile?"):
+            self._serve_file(DASHBOARD_DIR / "mobile.html", "text/html")
+        elif self.path.rstrip("/") == "/manifest.json":
+            self._serve_file(DASHBOARD_DIR / "manifest.json", "application/manifest+json")
+        elif self.path.rstrip("/") == "/sw.js":
+            self._serve_file(DASHBOARD_DIR / "sw.js", "application/javascript")
         else:
             super().do_GET()
 
@@ -46,7 +51,7 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Palm-Token")
         self.end_headers()
 
     def do_PATCH(self):

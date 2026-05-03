@@ -56,6 +56,17 @@ PALM COMMAND is a home security AI surveillance system ("Situational Awareness S
 - **Add a forward-intel scenario**: implement `_scenario_<name>()` returning a list of scenario dicts and append to the tuple in `build_scenarios()`.
 - **Add a query intent**: append to `_INTENT_PATTERNS` (Palantir patterns FIRST, generic LAST) in query_agent.py and add the corresponding `_handle_<intent>()` function. Register in the `handlers` dict in `query()`.
 
+### Mobile PWA — Pixel 10 Operator App (NEW)
+- **`dashboard/mobile.html`** — Palantir-style progressive web app optimized for Android phones. Installable to home screen ("Add to Home Screen" in Chrome). Five tactical tabs:
+  - **FEED** — Live annotated camera snapshots (polling snap_ann every 2.5s), canvas overlay for additional AI bounding boxes, **17-point COCO skeleton** rendered in real-time over person detections with per-joint color coding, gait radar chart (hexagonal, 6 axes) for each detected person, per-camera switching, threat level chip strip.
+  - **INTEL** — Entity cards with profile thumbnails, sighting counts, camera trail, behavior class badge, embedded gait radar per entity. Forward intelligence scenario cards with probability bars. System-wide stat overview (profiles, entities, events today, alerts).
+  - **ALERTS** — Chronological intel_alerts feed, severity color-coded (red/orange/yellow/blue), floating banner at top for new critical/high alerts.
+  - **TERMINAL** — Full PALANTIR query interface with quick-tap command chips (briefing, strangers, forecast, who today, threat, entities, notifications, help), monospace dark terminal output, full keyboard input.
+  - **OVERWATCH** — Neighborhood traffic cam map (Palm Springs) + area intelligence briefing.
+- **`dashboard/manifest.json`** — PWA manifest for "Add to Home Screen" installability.
+- **`dashboard/sw.js`** — Service worker: network-first for API calls, cache-first for app shell.
+- Route: `/mobile` served by `serve_dashboard.py`.
+
 ## Workflows
 - **Start application** — `python3.12 serve_dashboard.py` on port 5000
 
