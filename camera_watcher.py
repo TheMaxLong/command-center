@@ -331,12 +331,14 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
     cam_id     = cam_cfg["id"]
     ip         = cam_cfg["ip"]
     port       = int(cam_cfg.get("port", 8800))
-    poll_s     = float(cam_cfg.get("poll_interval", 3))
+    poll_s     = float(cam_cfg.get("poll_interval", 8))
+    cooldown_s = float(cam_cfg.get("cooldown", 30))
     was_online = False
     capturing  = False
+    last_cap   = 0.0
     state      = cameras[cam_id]
 
-    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {poll_s}s", flush=True)
+    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {poll_s}s cooldown={cooldown_s}s", flush=True)
 
     while True:
         try:
@@ -347,7 +349,8 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
             except Exception:
                 pass
 
-            if not was_online and not capturing:
+            in_cooldown = (time.time() - last_cap) < cooldown_s
+            if not was_online and not capturing and not in_cooldown:
                 was_online    = True
                 capturing     = True
                 state.online  = True
@@ -357,13 +360,14 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
                 print(f"[{ts_str}] [{cam_id}] MOTION #{state.events}", flush=True)
 
                 async def _capture(cfg=cam_cfg, cid=cam_id):
-                    nonlocal capturing, was_online
+                    nonlocal capturing, was_online, last_cap
                     try:
                         event_ts = time.time()
                         clip_ok, snap_ok = await _tapo_capture(cfg, cid)
                         if clip_ok or snap_ok:
                             state.last_mode = "clip" if clip_ok else "snap"
                             _fire_ai(cid, event_ts, clip_ok, snap_ok)
+                        last_cap = time.time()
                     finally:
                         capturing    = False
                         was_online   = False
