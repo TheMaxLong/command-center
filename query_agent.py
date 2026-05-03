@@ -160,7 +160,34 @@ def _extract_condition(text: str) -> str:
 # ── Intent classification ─────────────────────────────────────────
 
 _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
-    ("summary",        ["briefing", "summary", "what happened", "update me", "status", "report", "overview"]),
+    # ── Palantir intelligence layer (checked FIRST — specific beats general) ──
+    ("wanted_persons", ["wanted", "fbi", "fugitive", "criminal", "most wanted", "felon", "suspect database",
+                        "face match", "face intel", "face comparison", "face database", "match log"]),
+    ("gait_intel",     ["gait", "gait analysis", "gait signature", "gait report",
+                        "walking pattern", "identify by walk", "leg distance", "stride width",
+                        "how they walk", "biometric walk"]),
+    ("pattern_intel",  ["pattern of life", "pol report", "behavioral model", "pol briefing",
+                        "entity graph", "entity relationship", "relationship graph",
+                        "who travels with", "co-appear", "association map"]),
+    ("predictions",    ["predict arrival", "next arrival", "when will they", "arrival forecast",
+                        "when do they come", "next visit", "expected arrival", "overdue visitor"]),
+    ("threat_score",   ["threat score", "risk score", "score profile", "danger score",
+                        "score this person", "score them", "risk level profile"]),
+    # ── External intelligence feeds ──────────────────────────────────
+    ("earthquake",     ["earthquake", "quake", "seismic", "tremor", "fault", "shaking", "richter", "magnitude"]),
+    ("weather_alert",  ["weather alert", "fire weather", "red flag", "air quality", "aqi", "heat warning",
+                        "wind advisory", "dust storm", "extreme heat", "nws alert", "haboob"]),
+    ("fire_intel",     ["calfire", "wildfire", "brush fire", "structure fire", "fire near", "cal fire",
+                        "active fire", "fire incident", "acres burning", "containment"]),
+    ("local_incidents",["local crime", "citizen", "nearby incident", "neighborhood", "what's happening near",
+                        "crime near", "shooting near", "robbery", "police near", "ems near",
+                        "911 near", "incident near", "local incident", "area crime"]),
+    ("area_threat",    ["threat level", "area threat", "threat assessment", "danger level", "safe",
+                        "how safe", "area status", "local threat", "anything dangerous", "any danger"]),
+    ("plates",         ["license plate", "plate", "lpr", "vehicle plate", "plates seen", "plate log"]),
+    # ── Core surveillance ─────────────────────────────────────────────
+    ("summary",        ["briefing", "summary", "what happened", "update me", "status report",
+                        "give me a report", "overview", "daily report", "intel report"]),
     ("who_today",      ["who was here", "who came", "who visited", "who showed up", "who appeared"]),
     ("stranger_check", ["stranger", "unknown", "unfamiliar", "never seen", "new person", "new visitor"]),
     ("anomaly_check",  ["unusual", "anomaly", "anomalies", "weird", "abnormal", "suspicious", "odd"]),
@@ -174,18 +201,6 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
     ("person_info",    ["tell me about", "who is", "profile", "regular-", "unknown-", "information on"]),
     ("watchlist_add",  ["alert me", "notify me", "watch for", "flag", "tell me when", "ping me"]),
     ("watchlist_show", ["watchlist", "rules", "active alerts", "my alerts", "what are you watching"]),
-    # ── External intelligence feeds ──────────────────────────────────
-    ("earthquake",     ["earthquake", "quake", "seismic", "tremor", "fault", "shaking", "richter", "magnitude"]),
-    ("weather_alert",  ["weather alert", "fire weather", "red flag", "air quality", "aqi", "heat warning",
-                        "wind advisory", "dust storm", "extreme heat", "nws alert", "haboob"]),
-    ("fire_intel",     ["calfire", "wildfire", "brush fire", "structure fire", "fire near", "cal fire",
-                        "active fire", "fire incident", "acres burning", "containment"]),
-    ("local_incidents",["local crime", "citizen", "nearby incident", "neighborhood", "what's happening near",
-                        "crime near", "shooting near", "robbery", "police near", "ems near",
-                        "911 near", "incident near", "local incident", "area crime"]),
-    ("area_threat",    ["threat level", "area threat", "threat assessment", "danger level", "safe",
-                        "how safe", "area status", "local threat", "anything dangerous", "any danger"]),
-    ("plates",         ["license plate", "plate", "lpr", "vehicle plate", "plates seen", "plate log"]),
     ("help",           ["help", "what can you do", "commands", "options", "capabilities"]),
 ]
 
@@ -643,6 +658,212 @@ def _handle_plates(text: str, camera_id: Optional[str]) -> dict:
     return {"intent": "plates", "answer": "\n".join(lines), "data": {"plates": unique}}
 
 
+def _handle_wanted_persons(text: str, camera_id) -> dict:
+    try:
+        import face_intel as _fi
+        stats  = _fi.get_stats()
+        log    = _fi.get_match_log(10)
+        t      = text.lower()
+        # Search query?
+        for kw in ["search", "find", "look for", "named", "called"]:
+            if kw in t:
+                q = text.split(kw, 1)[-1].strip().strip("?").strip()[:40]
+                if q:
+                    results = _fi.search_wanted(q)
+                    lines = [f"▸ FBI DATABASE SEARCH: '{q}'",
+                             f"▸ {len(results)} result(s) from {stats['fbi_count']} indexed records"]
+                    for r in results[:5]:
+                        lines.append(f"\n  [{r['field_office'].upper()}] {r['name']}")
+                        lines.append(f"    {r['race']} {r['sex']} · Eyes: {r['eyes']} · Hair: {r['hair']}")
+                        lines.append(f"    Charges: {', '.join(r['subjects'][:3])}")
+                        if r.get("reward"):
+                            lines.append(f"    Reward: {r['reward'][:80]}")
+                    return {"intent": "wanted_persons", "answer": "\n".join(lines), "data": {"results": results}}
+
+        # Match log
+        if any(k in t for k in ["match", "face match", "match log", "hit"]):
+            if not log:
+                return {"intent": "wanted_persons",
+                        "answer": "▸ FACE INTEL — No matches logged yet.\n▸ System will alert automatically if a face matches FBI database.",
+                        "data": {"matches": []}}
+            lines = [f"▸ FACE INTEL MATCH LOG — {len(log)} recent hit(s):"]
+            for m in log[:8]:
+                lines.append(f"\n  ⚠ [{m['confidence']}] {m['name']} (source: {m['source']})")
+                lines.append(f"    Similarity: {m['similarity']:.3f} · Camera: {m['camera']}")
+                lines.append(f"    {m.get('ts_human','')}")
+            return {"intent": "wanted_persons", "answer": "\n".join(lines), "data": {"matches": log}}
+
+        # General status
+        wanted = _fi.get_wanted_list(10)
+        lines = [
+            f"▸ FBI WANTED DATABASE — PALM COMMAND INTEL",
+            f"▸ {stats['fbi_count']} wanted persons indexed from field offices: {', '.join(stats['field_offices'])}",
+            f"▸ Last refresh: {stats['last_fbi_refresh']}",
+            f"▸ Face match threshold: {stats['match_threshold']:.0%} similarity",
+            f"▸ Match log: {stats['match_log_count']} face comparison hits",
+            f"",
+            f"▸ REGIONAL WANTED PERSONS (sample):",
+        ]
+        for w in wanted[:6]:
+            lines.append(f"  · {w['name']} [{w['field_office'].upper()}]")
+            lines.append(f"    {w['race']} {w['sex']} · {', '.join(w['subjects'][:2])}")
+        lines.append(f"\n▸ System actively compares all detected faces against this database.")
+        lines.append(f"▸ Try: 'search FBI for [name]' or 'show face match log'")
+        ctx = f"FBI database: {stats['fbi_count']} records, match log: {stats['match_log_count']} hits"
+        llm = _llm_query(text, ctx)
+        return {"intent": "wanted_persons", "answer": llm or "\n".join(lines), "data": stats}
+    except Exception as e:
+        return {"intent": "wanted_persons", "answer": f"▸ Face intel unavailable: {e}", "data": {}}
+
+
+def _handle_gait_intel(text: str, camera_id) -> dict:
+    try:
+        import gait_engine as _ge
+        profiles = _ge.get_gait_profiles()
+        lines = [
+            "▸ GAIT BIOMETRIC ANALYSIS — PALM COMMAND",
+            "▸ Identifies individuals by skeletal walk signature — no face required.",
+            "▸ Uses YOLOv8-pose 17-keypoint skeleton. 18-dimensional biometric vector.",
+            "▸ Features: stride width · torso lean · arm swing · hip sway · step height",
+            "           knee bend · elbow angle · shoulder/hip ratio · head bob · cadence",
+            "",
+        ]
+        if not profiles:
+            lines.append("▸ No gait profiles captured yet.")
+            lines.append("▸ Gait signatures are built automatically as people walk past cameras.")
+            lines.append("▸ Minimum 5 frames needed to establish a stable signature.")
+        else:
+            lines.append(f"▸ {len(profiles)} GAIT PROFILE(S) CAPTURED:")
+            for p in profiles[:8]:
+                pid     = p.get("person_profile_id")
+                linked  = f" → Person-{pid:03d}" if pid else " (unlinked)"
+                cameras = ", ".join(p["cameras"][:3]) if p.get("cameras") else "?"
+                lines.append(f"\n  [{p['label']}]{linked}")
+                lines.append(f"    Sightings: {p['sightings']} · Camera(s): {cameras}")
+        lines.append("\n▸ Gait data persists across clothing changes and lighting conditions.")
+        lines.append("▸ Works even when face is obscured, turned away, or masked.")
+        ctx = f"{len(profiles)} gait profiles. Features: stride, torso lean, arm swing, hip sway."
+        llm = _llm_query(text, ctx)
+        return {"intent": "gait_intel", "answer": llm or "\n".join(lines), "data": {"profiles": profiles}}
+    except Exception as e:
+        return {"intent": "gait_intel", "answer": f"▸ Gait engine unavailable: {e}", "data": {}}
+
+
+def _handle_pattern_intel(text: str, camera_id) -> dict:
+    try:
+        import pattern_engine as _pe
+        t = text.lower()
+        # Entity graph
+        if any(k in t for k in ["graph", "relationship", "associate", "travels with", "co-appear"]):
+            graph = _pe.get_entity_graph()
+            lines = [
+                "▸ ENTITY RELATIONSHIP GRAPH",
+                f"▸ {graph['node_count']} entities · {graph['edge_count']} relationship edges",
+                "",
+            ]
+            assocs = graph.get("top_associations", [])
+            if assocs:
+                lines.append("▸ STRONGEST ASSOCIATIONS:")
+                for a in assocs[:8]:
+                    lines.append(f"  · Profile-{a['profile_a']:03d} ↔ Profile-{a['profile_b']:03d}  "
+                                 f"— {a['co_appearances']} co-appearances within 5-min window")
+            else:
+                lines.append("▸ No co-appearance data yet. Graph builds as entities are detected together.")
+            ctx = f"Entity graph: {graph['node_count']} nodes, {graph['edge_count']} edges"
+            llm = _llm_query(text, ctx)
+            return {"intent": "pattern_intel", "answer": llm or "\n".join(lines), "data": graph}
+
+        # General POL briefing
+        briefing = _pe.get_pol_briefing()
+        all_pol  = _pe.get_all_patterns()
+        ctx = f"{len(all_pol)} pattern-of-life models. {briefing[:400]}"
+        llm = _llm_query(text, ctx)
+        return {"intent": "pattern_intel", "answer": llm or briefing, "data": {"count": len(all_pol)}}
+    except Exception as e:
+        return {"intent": "pattern_intel", "answer": f"▸ Pattern engine unavailable: {e}", "data": {}}
+
+
+def _handle_predictions(text: str, camera_id) -> dict:
+    try:
+        import pattern_engine as _pe
+        preds = _pe.get_predictions()
+        if not preds:
+            return {
+                "intent": "predictions",
+                "answer": (
+                    "▸ ARRIVAL PREDICTIONS — PALM COMMAND\n"
+                    "▸ No predictions available yet.\n"
+                    "▸ Need at least 5 sightings per entity to build a behavioral model.\n"
+                    "▸ Models improve automatically as entities are tracked over time."
+                ),
+                "data": {"predictions": []},
+            }
+        lines = [
+            f"▸ ARRIVAL PREDICTIONS — {len(preds)} entity forecast(s)",
+            f"▸ Based on Kalman-smoothed historical timing patterns.",
+            "",
+        ]
+        for p in preds[:8]:
+            conf_bar = "█" * int(p["confidence"] * 10) + "░" * (10 - int(p["confidence"] * 10))
+            overdue  = "  ⚠ OVERDUE" if p["est_minutes"] <= 0 else ""
+            lines.append(f"  {p['label']}{overdue}")
+            lines.append(f"    Next arrival: {p['window_label']} · Confidence [{conf_bar}] {p['confidence']:.0%}")
+            lines.append(f"    Peak day: {p['peak_day']} · Peak hour: {p['peak_hour']:02d}:00 "
+                         f"· Avg interval: {p['avg_interval_h']:.1f}h")
+            lines.append(f"    Last seen: {p['since_last_h']:.1f}h ago")
+            lines.append("")
+        ctx = "\n".join(f"{p['label']}: {p['window_label']} conf={p['confidence']:.0%}" for p in preds[:5])
+        llm = _llm_query(text, ctx)
+        return {"intent": "predictions", "answer": llm or "\n".join(lines), "data": {"predictions": preds}}
+    except Exception as e:
+        return {"intent": "predictions", "answer": f"▸ Prediction engine unavailable: {e}", "data": {}}
+
+
+def _handle_threat_score(text: str, camera_id) -> dict:
+    try:
+        import pattern_engine as _pe
+        # Extract profile ID from text
+        import re
+        m = re.search(r"profile[- ]?(\d+)|regular[- ]?(\d+)|unknown[- ]?(\d+)|person[- ]?(\d+)", text.lower())
+        if m:
+            pid = int(next(g for g in m.groups() if g is not None))
+            score = _pe.score_appearance(pid, time.time(), camera_id or "")
+            lines = [
+                f"▸ THREAT SCORE — Profile-{pid:03d}",
+                f"▸ Score: {score['score']:.3f} / 1.000",
+                f"▸ Level: {score['level']} — {score['label']}",
+            ]
+            if score["reasons"]:
+                lines.append("▸ Contributing factors:")
+                for r in score["reasons"]:
+                    lines.append(f"  · {r}")
+            return {"intent": "threat_score", "answer": "\n".join(lines), "data": score}
+
+        # General explanation
+        lines = [
+            "▸ THREAT SCORING ENGINE — PALM COMMAND",
+            "▸ Computes real-time risk score (0.0–1.0) for each detected entity.",
+            "",
+            "▸ SCORE COMPONENTS:",
+            "  · Temporal anomaly — how unusual is this appearance time for this entity?",
+            "  · Regularity — known regular vs. unknown/rare visitor",
+            "  · Face intel match — FBI/POI database hit confidence",
+            "  · Gait confirmation — biometric identity confirmation",
+            "  · Pattern deviation — how far from their normal behavioral baseline?",
+            "",
+            "▸ THREAT LEVELS:",
+            "  RED    (0.70–1.00) — High threat · immediate attention required",
+            "  ORANGE (0.45–0.70) — Elevated · monitor closely",
+            "  YELLOW (0.25–0.45) — Watch · log for review",
+            "  GREEN  (0.00–0.25) — Nominal · within expected parameters",
+            "",
+            "▸ Usage: 'threat score profile 3' or 'score this person'",
+        ]
+        return {"intent": "threat_score", "answer": "\n".join(lines), "data": {}}
+    except Exception as e:
+        return {"intent": "threat_score", "answer": f"▸ Threat scoring unavailable: {e}", "data": {}}
+
+
 def intel_feeds_loc() -> str:
     try:
         import intel_feeds
@@ -678,16 +899,26 @@ WATCHLIST / RULES:
 
 EXTERNAL INTELLIGENCE (live data):
   "Any earthquakes nearby"
-  "Seismic activity report"
   "Any weather alerts / red flag warning"
   "Active wildfires near me"
   "Local crime / what's happening in the area"
   "Area threat level / how safe is it"
   "License plates seen today"
 
+PALANTIR INTELLIGENCE LAYER:
+  "FBI wanted persons / show face match log"
+  "Search FBI for [name]"
+  "Gait analysis / identify by walk"
+  "Pattern of life report / behavioral models"
+  "Entity relationships / who travels together"
+  "Predict next arrival / when will they return"
+  "Threat score profile [N]"
+
 MISSION INTEL:
   Powered by PALM COMMAND database + NWS · USGS · CAL FIRE · Citizen
+  FBI Most Wanted (1,160+ records) · Face intel · Gait biometrics
   Kalman filter tracking · LPR active on vehicle detections
+  Pattern-of-life engine · Entity relationship graph · Threat scoring
   Set OPENAI_API_KEY or ANTHROPIC_API_KEY for LLM upgrade"""
     return {"intent": "help", "answer": answer, "data": {}}
 
@@ -757,6 +988,12 @@ def query(
         "local_incidents": _handle_local_incidents,
         "area_threat":     _handle_area_threat,
         "plates":          _handle_plates,
+        # Palantir intelligence layer
+        "wanted_persons":  _handle_wanted_persons,
+        "gait_intel":      _handle_gait_intel,
+        "pattern_intel":   _handle_pattern_intel,
+        "predictions":     _handle_predictions,
+        "threat_score":    _handle_threat_score,
         "help":           _handle_help,
         "general":        _handle_general,
     }

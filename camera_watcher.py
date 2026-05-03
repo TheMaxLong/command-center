@@ -35,6 +35,10 @@ import intel_engine
 import query_agent
 import intel_feeds
 import lpr_engine
+import gait_engine
+import face_intel
+import pattern_engine
+import traffic_cam
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -181,12 +185,60 @@ def _run_ai_and_store(
             for pid in profile_ids
         ]
 
+    # ── Gait analysis — skeletal biometric identification
+    if snap_path and detections:
+        person_dets = [d for d in detections if d.get("class") == "person"]
+        if person_dets:
+            try:
+                detections = gait_engine.process_frame(snap_path, detections, cam_id, event_ts)
+            except Exception as ge:
+                print(f"[gait] error: {ge}", flush=True)
+
+    # ── Face intelligence — compare against FBI + POI database
+    if snap_path and detections:
+        for det in detections:
+            if det.get("class") == "person" and det.get("track_id"):
+                try:
+                    matches = face_intel.compare_detection(snap_path, det, cam_id, event_ts)
+                    if matches:
+                        top = matches[0]
+                        det["face_match"] = top
+                        if top["confidence"] in ("HIGH", "MEDIUM"):
+                            alert_msg = (f"FACE INTEL HIT: {top['name']} "
+                                         f"({top['source']}) conf={top['confidence']} on {cam_id}")
+                            event_db.insert_alert("face_intel", "critical", alert_msg, cam_id, event_ts)
+                            print(f"[face_intel] ⚠ {alert_msg}", flush=True)
+                except Exception as fe:
+                    print(f"[face_intel] error: {fe}", flush=True)
+
     # Check for stranger alerts
     for pid in profile_ids:
         if intel_engine.stranger_alert(pid, event_ts, cam_id):
             msg = f"Unknown person on {cam_id.upper()} during off-peak hours"
             event_db.insert_alert("stranger", "warn", msg, cam_id, event_ts)
             print(f"[intel] ALERT: {msg}", flush=True)
+
+    # ── Pattern-of-life threat scoring for each confirmed person
+    if profile_ids:
+        try:
+            eng = pattern_engine.get_engine()
+            eng.build()
+            for i, pid in enumerate(profile_ids):
+                gait_conf = 0.0
+                face_conf = 0.0
+                if i < len(detections):
+                    d = detections[i]
+                    gait_conf = d.get("gait_conf") or 0.0
+                    face_conf = (d.get("face_match") or {}).get("similarity") or 0.0
+                score = eng.score_appearance(pid, event_ts, cam_id, gait_conf, face_conf)
+                if score["level"] in ("RED", "ORANGE"):
+                    alert_msg = (f"THREAT SCORE {score['level']}: "
+                                 f"Profile-{pid:03d} on {cam_id} · "
+                                 f"{' · '.join(score['reasons'][:2])}")
+                    event_db.insert_alert("threat_score", score["level"].lower(),
+                                          alert_msg, cam_id, event_ts)
+        except Exception as pe:
+            print(f"[pattern] scoring error: {pe}", flush=True)
 
     # Build scene summary
     summary = intel_engine.scene_summary(detections, profile_objs, cam_id)
@@ -570,6 +622,70 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/feeds/briefing":
             self._json({"briefing": intel_feeds.generate_briefing()})
 
+        # /feeds/gait         → gait biometric profiles
+        elif p == "/feeds/gait":
+            profiles = gait_engine.get_gait_profiles()
+            self._json({"profiles": profiles, "count": len(profiles)})
+
+        # /intel/patterns     → pattern-of-life summary for all entities
+        elif p == "/intel/patterns":
+            patterns = pattern_engine.get_all_patterns()
+            self._json({"patterns": patterns, "count": len(patterns)})
+
+        # /intel/predictions  → arrival predictions for known regulars
+        elif p == "/intel/predictions":
+            self._json({"predictions": pattern_engine.get_predictions()})
+
+        # /intel/graph        → entity relationship graph
+        elif p == "/intel/graph":
+            self._json(pattern_engine.get_entity_graph())
+
+        # /intel/pol_briefing → Palantir-style pattern-of-life briefing
+        elif p == "/intel/pol_briefing":
+            self._json({"briefing": pattern_engine.get_pol_briefing()})
+
+        # /intel/wanted       → FBI wanted persons database
+        elif p == "/intel/wanted":
+            q = qp("q")
+            if q:
+                self._json({"results": face_intel.search_wanted(q), "query": q})
+            else:
+                self._json({
+                    "wanted": face_intel.get_wanted_list(50),
+                    "stats":  face_intel.get_stats(),
+                })
+
+        # /intel/match_log    → face comparison match history
+        elif p == "/intel/match_log":
+            self._json({"matches": face_intel.get_match_log(50)})
+
+        # /intel/movement/<id> → cross-camera movement chain
+        elif parts[0] == "intel" and len(parts) == 3 and parts[1] == "movement":
+            try:
+                pid   = int(parts[2])
+                hours = float(qp("hours") or 24)
+                self._json({"chain": pattern_engine.get_movement_chain(pid, hours),
+                            "profile_id": pid})
+            except ValueError:
+                self._not_found()
+
+        # /trafficcam         → neighborhood overwatch map (JPEG)
+        elif p == "/trafficcam":
+            img = traffic_cam.get_image()
+            if not img:
+                self._not_found(); return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(img)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Cache-Control", f"max-age={traffic_cam.CACHE_SEC}")
+            self.end_headers()
+            self.wfile.write(img)
+
+        # /trafficcam/status  → traffic cam module status JSON
+        elif p == "/trafficcam/status":
+            self._json(traffic_cam.get_status())
+
         else:
             self._not_found()
 
@@ -702,6 +818,21 @@ async def main() -> None:
     # Start intelligence feeds background refresh
     intel_feeds.start_background_refresh(interval_s=180)
     print("[watcher] Intel feeds refresh started", flush=True)
+
+    # Start FBI wanted persons database (background fetch)
+    face_intel.start_background_refresh()
+    print("[watcher] Face intel (FBI database) refresh started", flush=True)
+
+    # Start neighborhood traffic cam (OSM tile map)
+    traffic_cam.start_background_refresh()
+    print("[watcher] Neighborhood overwatch started", flush=True)
+
+    # Initialize pattern-of-life engine
+    try:
+        pattern_engine.get_engine().build()
+    except Exception:
+        pass
+    print("[watcher] Pattern-of-life engine initialized", flush=True)
 
     for cfg in cam_cfgs:
         cameras[cfg["id"]] = CameraState(id=cfg["id"], name=cfg["name"])

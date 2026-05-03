@@ -13,7 +13,21 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
 
-DB_PATH = Path(os.environ.get("DB_PATH", "/data/events.db"))
+def _default_db_path() -> Path:
+    """Return a writable DB path, falling back to /tmp if /data doesn't exist."""
+    env = os.environ.get("DB_PATH", "")
+    if env:
+        return Path(env)
+    data_dir = Path("/data")
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+        test = data_dir / ".write_test"
+        test.touch(); test.unlink()
+        return data_dir / "events.db"
+    except Exception:
+        return Path("/tmp/palm_command_events.db")
+
+DB_PATH = _default_db_path()
 
 
 def _conn() -> sqlite3.Connection:
