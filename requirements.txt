@@ -8,3 +8,17 @@ Pillow>=10.0        # bounding-box annotation + person crop extraction
 # comment out if you only use Tapo cameras to keep the image smaller
 opencv-python-headless>=4.8
 numpy>=1.24
+Pillow
+pyyaml
+numpy
+opencv-python-headless
+Pillow
+pytapo
+pyyaml
+ultralytics
+pyyaml
+Pillow
+pytapo
+numpy
+opencv-python-headless
+ultralytics

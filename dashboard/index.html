@@ -574,7 +574,7 @@
         <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
       </div>
       <div class="tile-body" style="position:relative;">
-        <iframe src="http://localhost:1984/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <iframe src="/go2rtc/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
         <div class="tile-badge badge-live">LIVE</div>
         <div id="front-det-bar"></div>
       </div>
@@ -1045,7 +1045,7 @@ setInterval(() => {
 // ── go2rtc STREAM STATUS ─────────────────────────────────────────
 async function checkStreams() {
   try {
-    const res  = await fetch('http://localhost:1984/api/streams');
+    const res  = await fetch('/go2rtc/api/streams');
     const data = await res.json();
     const frontOk = data.front_cam?.producers?.length > 0;
     document.getElementById('fs-front').textContent = frontOk ? 'LIVE' : 'NO SIGNAL';
@@ -1104,7 +1104,7 @@ function tickBellAgo() {
 
 async function refreshDoorbell() {
   try {
-    const res  = await fetch('http://localhost:8181/status/doorbell');
+    const res  = await fetch('/api/status/doorbell');
     const data = await res.json();
     const t    = Date.now();
 
@@ -1132,7 +1132,7 @@ async function refreshDoorbell() {
         clip.style.display = 'block';
         age.style.display  = 'block';
         if (clip.dataset.event !== String(data.events)) {
-          clip.src = 'http://localhost:8181/clip?t=' + t;
+          clip.src = '/api/clip?t=' + t;
           clip.dataset.event = String(data.events);
           clip.load(); clip.play().catch(()=>{});
         }
@@ -1166,8 +1166,8 @@ async function refreshDoorbell() {
       // ── Show annotated snap when available ───────────────────
       if (data.has_snap) {
         const snapSrc = data.has_snap_ann
-          ? `http://localhost:8181/snap_ann/doorbell?t=${t}`
-          : `http://localhost:8181/snap/doorbell?t=${t}`;
+          ? `/api/snap_ann/doorbell?t=${t}`
+          : `/api/snap/doorbell?t=${t}`;
         if (snap.src.split('?')[0] !== snapSrc.split('?')[0] || snap.dataset.event !== String(data.events)) {
           snap.src = snapSrc;
           snap.dataset.event = String(data.events);
@@ -1237,7 +1237,7 @@ function renderDetBar(barEl, detections, profiles) {
 
 async function refreshFrontCam() {
   try {
-    const res  = await fetch('http://localhost:8181/status/front_cam');
+    const res  = await fetch('/api/status/front_cam');
     const data = await res.json();
     renderDetBar(document.getElementById('front-det-bar'), data.detections, data.profiles);
     const meta = document.getElementById('front-meta');
@@ -1280,7 +1280,7 @@ async function loadProfiles() {
   const body = document.getElementById('ai-body');
   body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
   try {
-    const res      = await fetch('http://localhost:8181/profiles');
+    const res      = await fetch('/api/profiles');
     const profiles = await res.json();
     if (!profiles.length) {
       body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO PROFILES YET — person detections build profiles over time</div>';
@@ -1297,7 +1297,7 @@ async function loadProfiles() {
       const lastDt    = new Date(p.last_seen  * 1000);
       const fmtDate   = d => d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true});
       const thumbEl   = p.has_thumb
-        ? `<img class="profile-thumb" src="http://localhost:8181/thumb/${p.id}" alt="">` 
+        ? `<img class="profile-thumb" src="/api/thumb/${p.id}" alt="">` 
         : `<div class="profile-thumb-placeholder">◉</div>`;
       const cams      = (p.cameras || []).map(c => c.toUpperCase()).join(' · ') || '—';
       const habits    = p.habits || {};
@@ -1332,7 +1332,7 @@ async function loadEventLog() {
   const body = document.getElementById('ai-body');
   body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
   try {
-    const res    = await fetch('http://localhost:8181/events?limit=100');
+    const res    = await fetch('/api/events?limit=100');
     const events = await res.json();
     if (!events.length) {
       body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO EVENTS YET</div>';
@@ -1353,7 +1353,7 @@ async function loadEventLog() {
         return `<span class="det-tag ${clsCss}">${cls2.toUpperCase()} ${pct}%</span>`;
       }).join('');
       const snapSrc = ev.snap_path
-        ? `http://localhost:8181/snap/${ev.camera_id}?t=${ev.ts}`
+        ? `/api/snap/${ev.camera_id}?t=${ev.ts}`
         : '';
       const snapEl = snapSrc
         ? `<img class="ai-ev-snap" src="${snapSrc}" alt="">` : '';
@@ -1373,12 +1373,12 @@ async function loadTrends() {
   const body = document.getElementById('ai-body');
   body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
   try {
-    const res  = await fetch('http://localhost:8181/trends?weeks=5');
+    const res  = await fetch('/api/trends?weeks=5');
     const data = await res.json();
 
     // Heatmap
     const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
-    const hm: Record<string, number> = {};
+    const hm = {};
     let maxCount = 1;
     for (const row of (data.heatmap || [])) {
       hm[`${row.day_of_week}_${row.hour}`] = row.count;
