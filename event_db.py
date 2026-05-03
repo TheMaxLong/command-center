@@ -98,6 +98,19 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_alerts_ts ON intel_alerts(ts);
 
+            -- manual_scans: field app plate/face scan log
+            CREATE TABLE IF NOT EXISTS manual_scans (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                scan_type     TEXT    NOT NULL,
+                plate         TEXT,
+                confidence    REAL,
+                watchlist_hit INTEGER DEFAULT 0,
+                fbi_match     INTEGER,
+                match_name    TEXT,
+                timestamp     TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ms_ts ON manual_scans(timestamp);
+
             -- Migration: add instance column to detections if missing
             -- (safe to run on existing databases)
         """)
@@ -383,3 +396,43 @@ def get_alerts(limit: int = 20, unread_only: bool = False) -> list[dict]:
 def mark_alert_read(alert_id: int) -> None:
     with _conn() as c:
         c.execute("UPDATE intel_alerts SET read = 1 WHERE id = ?", (alert_id,))
+
+
+# ── Field Scan (phone app) ────────────────────────────────────────
+
+def log_manual_scan(
+    scan_type: str,
+    plate: Optional[str] = None,
+    confidence: Optional[float] = None,
+    watchlist_hit: bool = False,
+    fbi_match: Optional[bool] = None,
+    match_name: Optional[str] = None,
+    timestamp: Optional[str] = None,
+) -> None:
+    ts = timestamp or datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO manual_scans "
+            "(scan_type, plate, confidence, watchlist_hit, fbi_match, match_name, timestamp) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (scan_type, plate, confidence, int(watchlist_hit),
+             int(fbi_match) if fbi_match is not None else None,
+             match_name, ts),
+        )
+
+
+def get_manual_scans(limit: int = 50) -> dict:
+    with _conn() as c:
+        c.row_factory = sqlite3.Row
+        rows = c.execute(
+            "SELECT scan_type, plate, confidence, watchlist_hit, "
+            "fbi_match, match_name, timestamp "
+            "FROM manual_scans ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    scans = [dict(r) for r in rows]
+    for s in scans:
+        s["watchlist_hit"] = bool(s["watchlist_hit"])
+        if s["fbi_match"] is not None:
+            s["fbi_match"] = bool(s["fbi_match"])
+    return {"scans": scans, "count": len(scans)}

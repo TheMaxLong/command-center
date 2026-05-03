@@ -562,6 +562,88 @@ async def rtsp_poll_loop(cam_cfg: dict) -> None:
         await asyncio.sleep(poll_s)
 
 
+# ── Field Scan helpers (phone app API) ───────────────────────────
+
+def _parse_upload(handler) -> Optional[bytes]:
+    ct     = handler.headers.get("Content-Type", "")
+    length = int(handler.headers.get("Content-Length", 0))
+    body   = handler.rfile.read(length)
+    if "boundary=" not in ct:
+        return body
+    boundary = ct.split("boundary=")[-1].strip().encode()
+    for part in body.split(b"--" + boundary):
+        if b'name="image"' in part or b"name='image'" in part:
+            idx = part.find(b"\r\n\r\n")
+            if idx != -1:
+                return part[idx + 4:].rstrip(b"\r\n-")
+    return None
+
+
+def _field_scan_plate(image_bytes: bytes) -> dict:
+    try:
+        import cv2
+        import numpy as np
+        arr  = np.frombuffer(image_bytes, np.uint8)
+        img  = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return {"plate": "", "confidence": 0.0}
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        candidates = lpr_engine._find_plate_candidates(gray)
+        if not candidates:
+            return {"plate": "", "confidence": 0.0}
+        best, best_conf = "", 0.0
+        for (x, y, w, h) in candidates:
+            crop = gray[y:y+h, x:x+w]
+            plate, conf = lpr_engine._ocr_region_opencv(crop)
+            if conf > best_conf and lpr_engine._is_valid_plate(plate):
+                best, best_conf = lpr_engine._normalize_plate(plate), conf
+        if not best:
+            for (x, y, w, h) in candidates:
+                crop = gray[y:y+h, x:x+w]
+                plate, conf = lpr_engine._ocr_region_easyocr(crop)
+                if conf > best_conf and lpr_engine._is_valid_plate(plate):
+                    best, best_conf = lpr_engine._normalize_plate(plate), conf
+        return {"plate": best, "confidence": round(best_conf, 3)}
+    except Exception as e:
+        return {"plate": "", "confidence": 0.0, "error": str(e)}
+
+
+def _field_scan_face(image_bytes: bytes) -> dict:
+    try:
+        import cv2
+        import numpy as np
+        arr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return {"faces_detected": 0, "fbi_match": False, "match_name": None, "match_details": None}
+        faces = face_intel.detect_faces_in_image(img)
+        if not faces:
+            return {"faces_detected": 0, "fbi_match": False, "match_name": None, "match_details": None}
+        engine = face_intel.get_engine()
+        all_matches: list[dict] = []
+        for (x, y, w, h) in faces:
+            crop = img[y:y+h, x:x+w]
+            all_matches.extend(engine.compare_face(crop, camera_id="field_scan"))
+        all_matches.sort(key=lambda m: -m["similarity"])
+        if all_matches:
+            top = all_matches[0]
+            return {
+                "faces_detected": len(faces),
+                "fbi_match":      True,
+                "match_name":     top.get("name"),
+                "match_details":  top.get("description") or top.get("subjects"),
+                "similarity":     top.get("similarity"),
+                "confidence":     top.get("confidence"),
+                "source":         top.get("source"),
+                "field_office":   top.get("field_office"),
+                "photo_url":      top.get("photo_url"),
+                "reward":         top.get("reward"),
+            }
+        return {"faces_detected": len(faces), "fbi_match": False, "match_name": None, "match_details": None}
+    except Exception as e:
+        return {"faces_detected": 0, "fbi_match": False, "match_name": None, "match_details": None, "error": str(e)}
+
+
 # ── HTTP server ───────────────────────────────────────────────────
 
 _PALM_API_TOKEN = os.environ.get("PALM_API_TOKEN", "")
@@ -908,6 +990,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._not_found(); return
             self._json(forward_intel.classify_entity(eid))
 
+        # ─── Field Scan (phone app) ─────────────────────────────────────
+        elif p == "/scan/history":
+            limit = min(int(parse_qs(parsed.query).get("limit", ["50"])[0]), 200)
+            self._json(event_db.get_manual_scans(limit))
+
         else:
             self._not_found()
 
@@ -941,8 +1028,50 @@ class Handler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         p      = parsed.path.rstrip("/")
 
+        # POST /scan/plate  — Field Scan LPR
+        if p == "/scan/plate":
+            image_bytes = _parse_upload(self)
+            if not image_bytes:
+                self.send_response(400); self.end_headers(); return
+            result    = _field_scan_plate(image_bytes)
+            plate     = result.get("plate", "")
+            conf      = result.get("confidence", 0.0)
+            hit       = lpr_engine.is_watched(plate) if plate else False
+            label     = lpr_engine.get_plate_label(plate) if plate else None
+            history   = []
+            try:
+                history = pattern_engine.get_history(plate) if plate else []
+            except Exception:
+                pass
+            ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            if plate:
+                event_db.log_manual_scan("plate", plate=plate, confidence=conf,
+                                         watchlist_hit=hit, timestamp=ts)
+            self._json({
+                "plate":           plate,
+                "confidence":      conf,
+                "watchlist_hit":   hit,
+                "watchlist_label": label,
+                "pattern_history": history,
+                "timestamp":       ts,
+            })
+
+        # POST /scan/face  — Field Scan FBI cross-reference
+        elif p == "/scan/face":
+            image_bytes = _parse_upload(self)
+            if not image_bytes:
+                self.send_response(400); self.end_headers(); return
+            result = _field_scan_face(image_bytes)
+            ts     = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            event_db.log_manual_scan("face",
+                                     fbi_match=result.get("fbi_match", False),
+                                     match_name=result.get("match_name"),
+                                     timestamp=ts)
+            result["timestamp"] = ts
+            self._json(result)
+
         # POST /agent/query  {"text": "...", "camera": "..."}
-        if p == "/agent/query":
+        elif p == "/agent/query":
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:

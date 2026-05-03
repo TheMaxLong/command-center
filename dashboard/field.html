@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Field Scan" />
+  <title>Field Scan</title>
+  <link rel="manifest" href="/field-manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0a0a0f;
+      --surface:   #13131c;
+      --border:    #1e1e2e;
+      --accent:    #00d4ff;
+      --danger:    #ff3b5c;
+      --warn:      #f5a623;
+      --green:     #00e676;
+      --text:      #e8eaf0;
+      --muted:     #6b7280;
+      --radius:    14px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+      max-width: 480px;
+      margin: 0 auto;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .logo svg { color: var(--accent); }
+
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+    }
+
+    /* ── Tab bar ── */
+    nav {
+      display: flex;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    nav button {
+      flex: 1;
+      padding: 12px 8px;
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    nav button.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ── Pages ── */
+    .page { display: none; flex: 1; overflow-y: auto; flex-direction: column; }
+    .page.active { display: flex; }
+
+    /* ── Scan page ── */
+    .scan-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 20px;
+      gap: 20px;
+    }
+
+    .viewfinder {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      aspect-ratio: 4/3;
+      background: #000;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    #video {
+      width: 100%; height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    #canvas { display: none; }
+
+    .corner {
+      position: absolute;
+      width: 22px; height: 22px;
+      border-color: var(--accent);
+      border-style: solid;
+      pointer-events: none;
+    }
+    .corner.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+    .corner.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+    .corner.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+    .corner.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+
+    .scan-line {
+      position: absolute;
+      left: 10px; right: 10px;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      animation: scanline 2.4s ease-in-out infinite;
+      opacity: 0;
+    }
+    .scanning .scan-line { opacity: 1; }
+
+    @keyframes scanline {
+      0%   { top: 10px; }
+      50%  { top: calc(100% - 12px); }
+      100% { top: 10px; }
+    }
+
+    .viewfinder-label {
+      position: absolute;
+      bottom: 8px; left: 0; right: 0;
+      text-align: center;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      text-shadow: 0 0 10px var(--accent);
+    }
+
+    /* ── Scan buttons ── */
+    .scan-buttons {
+      display: flex;
+      gap: 14px;
+      width: 100%;
+      max-width: 360px;
+    }
+
+    .btn-scan {
+      flex: 1;
+      padding: 18px 10px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      transition: transform 0.12s, opacity 0.12s, box-shadow 0.2s;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    .btn-scan:active { transform: scale(0.96); opacity: 0.85; }
+    .btn-scan:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+    .btn-plate {
+      background: linear-gradient(135deg, #0055aa 0%, #003880 100%);
+      box-shadow: 0 4px 24px rgba(0, 85, 170, 0.4);
+      color: #fff;
+    }
+    .btn-plate:not(:disabled):hover {
+      box-shadow: 0 6px 32px rgba(0, 212, 255, 0.5);
+    }
+
+    .btn-face {
+      background: linear-gradient(135deg, #5b0099 0%, #3d006b 100%);
+      box-shadow: 0 4px 24px rgba(91, 0, 153, 0.4);
+      color: #fff;
+    }
+    .btn-face:not(:disabled):hover {
+      box-shadow: 0 6px 32px rgba(180, 0, 255, 0.5);
+    }
+
+    .btn-icon { font-size: 26px; line-height: 1; }
+
+    /* ── Camera controls ── */
+    .cam-controls {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .btn-sm {
+      padding: 8px 18px;
+      border-radius: 30px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .btn-sm:hover { color: var(--text); border-color: var(--accent); }
+
+    /* ── Result card ── */
+    .result-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: flex-end;
+    }
+    .result-overlay.open { display: flex; }
+
+    .result-card {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      background: var(--surface);
+      border-radius: var(--radius) var(--radius) 0 0;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      padding: 24px 24px 40px;
+      animation: slideUp 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(100%); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .result-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .result-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .btn-close {
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-close:hover { color: var(--text); }
+
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 18px;
+      border-radius: 30px;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      margin-bottom: 20px;
+    }
+    .badge-hit {
+      background: rgba(255,59,92,0.15);
+      color: var(--danger);
+      border: 1px solid rgba(255,59,92,0.4);
+    }
+    .badge-clear {
+      background: rgba(0,230,118,0.12);
+      color: var(--green);
+      border: 1px solid rgba(0,230,118,0.3);
+    }
+    .badge-unknown {
+      background: rgba(245,166,35,0.12);
+      color: var(--warn);
+      border: 1px solid rgba(245,166,35,0.3);
+    }
+
+    .result-rows { display: flex; flex-direction: column; gap: 12px; }
+
+    .result-row {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+
+    .result-row-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .result-row-value {
+      font-size: 16px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    .result-row-value.plate-text {
+      font-size: 22px;
+      letter-spacing: 0.15em;
+      font-family: 'Courier New', monospace;
+      color: var(--accent);
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .processing-msg {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    /* ── History page ── */
+    .history-page {
+      padding: 16px 20px;
+      gap: 12px;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+
+    .history-title {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .btn-refresh {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+      transition: transform 0.3s;
+    }
+    .btn-refresh.spinning { animation: spin 0.6s linear infinite; }
+
+    .history-list { display: flex; flex-direction: column; gap: 10px; }
+
+    .history-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .history-icon {
+      width: 36px; height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .history-icon.plate { background: rgba(0,85,170,0.25); }
+    .history-icon.face  { background: rgba(91,0,153,0.25); }
+
+    .history-content { flex: 1; min-width: 0; }
+
+    .history-plate {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      font-family: 'Courier New', monospace;
+      color: var(--accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .history-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .history-hit {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 20px;
+      flex-shrink: 0;
+    }
+    .hit-yes { background: rgba(255,59,92,0.15); color: var(--danger); }
+    .hit-no  { background: rgba(0,230,118,0.10); color: var(--green); }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty-text { font-size: 14px; }
+
+    .error-banner {
+      background: rgba(255,59,92,0.12);
+      border: 1px solid rgba(255,59,92,0.3);
+      color: var(--danger);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      margin: 0 20px;
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        <path d="M11 8v6M8 11h6" />
+      </svg>
+      FIELD SCAN
+    </div>
+    <div class="status-dot" id="statusDot" title="Connected"></div>
+  </header>
+
+  <nav>
+    <button class="active" data-tab="scan" onclick="switchTab('scan')">SCAN</button>
+    <button data-tab="history" onclick="switchTab('history')">HISTORY</button>
+  </nav>
+
+  <!-- SCAN PAGE -->
+  <div class="page active" id="tab-scan">
+    <div class="scan-area">
+
+      <div class="viewfinder" id="viewfinder">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="scan-line"></div>
+        <div class="viewfinder-label" id="viewfinderLabel">READY</div>
+      </div>
+
+      <div id="errorBanner" class="error-banner" style="display:none;width:100%;max-width:360px;"></div>
+
+      <div class="scan-buttons">
+        <button class="btn-scan btn-plate" id="btnPlate" onclick="doScan('plate')">
+          <span class="btn-icon">🚗</span>
+          PLATE SCAN
+        </button>
+        <button class="btn-scan btn-face" id="btnFace" onclick="doScan('face')">
+          <span class="btn-icon">👤</span>
+          FACE SCAN
+        </button>
+      </div>
+
+      <div class="cam-controls">
+        <button class="btn-sm" onclick="startCamera()">⟳ Restart Cam</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- HISTORY PAGE -->
+  <div class="page" id="tab-history">
+    <div class="history-page">
+      <div class="history-header">
+        <span class="history-title">Recent Plate Scans</span>
+        <button class="btn-refresh" id="btnRefresh" onclick="loadHistory()" title="Refresh">↻</button>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <div class="empty-text">Loading history…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- RESULT OVERLAY -->
+<div class="result-overlay" id="resultOverlay" onclick="closeResult(event)">
+  <div class="result-card" id="resultCard">
+    <div class="result-header">
+      <span class="result-title" id="resultTitle">SCAN RESULT</span>
+      <button class="btn-close" onclick="closeResultCard()">✕</button>
+    </div>
+    <div id="resultBody">
+      <div class="processing-msg">
+        <div class="spinner"></div>
+        Processing…
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let stream = null;
+let currentScanType = null;
+let scanning = false;
+
+const video    = document.getElementById('video');
+const canvas   = document.getElementById('canvas');
+const ctx      = canvas.getContext('2d');
+const viewfinder = document.getElementById('viewfinder');
+const statusDot  = document.getElementById('statusDot');
+const errorBanner = document.getElementById('errorBanner');
+
+// ── Camera ─────────────────────────────────────────────────────────────────
+async function startCamera() {
+  hideError();
+  try {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); }
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 960 } },
+      audio: false
+    });
+    video.srcObject = stream;
+    setViewfinderLabel('READY');
+  } catch (e) {
+    showError('Camera unavailable: ' + e.message);
+    setViewfinderLabel('NO CAM');
+  }
+}
+
+function setViewfinderLabel(text) {
+  document.getElementById('viewfinderLabel').textContent = text;
+}
+
+// ── Scan ───────────────────────────────────────────────────────────────────
+async function doScan(type) {
+  if (scanning) return;
+  if (!stream) { showError('Camera not started — tap Restart Cam'); return; }
+
+  scanning = true;
+  currentScanType = type;
+  hideError();
+
+  // Capture frame
+  canvas.width  = video.videoWidth  || 1280;
+  canvas.height = video.videoHeight || 960;
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Start UI feedback
+  viewfinder.classList.add('scanning');
+  setViewfinderLabel(type === 'plate' ? 'READING PLATE…' : 'CHECKING FACE…');
+  setButtonsDisabled(true);
+
+  // Show processing card immediately
+  openResultCard(type, null);
+
+  // Convert canvas → blob → FormData
+  canvas.toBlob(async (blob) => {
+    const fd = new FormData();
+    fd.append('image', blob, 'capture.jpg');
+
+    try {
+      const endpoint = type === 'plate' ? '/api/scan/plate' : '/api/scan/face';
+      const res = await fetch(endpoint, { method: 'POST', body: fd });
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const data = await res.json();
+      renderResult(type, data);
+      if (type === 'plate') loadHistory();
+    } catch (e) {
+      renderError(e.message);
+    } finally {
+      viewfinder.classList.remove('scanning');
+      setViewfinderLabel('READY');
+      setButtonsDisabled(false);
+      scanning = false;
+    }
+  }, 'image/jpeg', 0.9);
+}
+
+function setButtonsDisabled(v) {
+  document.getElementById('btnPlate').disabled = v;
+  document.getElementById('btnFace').disabled  = v;
+}
+
+// ── Result card ────────────────────────────────────────────────────────────
+function openResultCard(type, data) {
+  document.getElementById('resultTitle').textContent =
+    type === 'plate' ? 'PLATE SCAN RESULT' : 'FACE SCAN RESULT';
+  document.getElementById('resultBody').innerHTML = `
+    <div class="processing-msg">
+      <div class="spinner"></div>
+      ${type === 'plate' ? 'Reading plate…' : 'Running FBI check…'}
+    </div>`;
+  document.getElementById('resultOverlay').classList.add('open');
+}
+
+function renderResult(type, data) {
+  const body = document.getElementById('resultBody');
+
+  if (type === 'plate') {
+    const hit = data.watchlist_hit === true;
+    const badge = hit
+      ? '<span class="result-badge badge-hit">🚨 WATCHLIST HIT</span>'
+      : '<span class="result-badge badge-clear">✓ NOT ON WATCHLIST</span>';
+
+    let rows = `
+      ${badge}
+      <div class="result-rows">
+        <div class="result-row">
+          <div class="result-row-label">Plate Number</div>
+          <div class="result-row-value plate-text">${esc(data.plate || 'UNREADABLE')}</div>
+        </div>
+        <div class="result-row">
+          <div class="result-row-label">Confidence</div>
+          <div class="result-row-value">${data.confidence ? Math.round(data.confidence * 100) + '%' : '—'}</div>
+        </div>
+    `;
+    if (data.pattern_history && data.pattern_history.length) {
+      rows += `<div class="result-row">
+        <div class="result-row-label">Pattern History (${data.pattern_history.length} events)</div>
+        <div class="result-row-value" style="font-size:13px;color:var(--warn)">${
+          data.pattern_history.slice(0,3).map(p =>
+            `${esc(p.timestamp || '')} — ${esc(p.location || p.camera || '')}`
+          ).join('<br>')
+        }${data.pattern_history.length > 3 ? `<br><span style="color:var(--muted)">+${data.pattern_history.length-3} more</span>` : ''}
+        </div>
+      </div>`;
+    }
+    rows += '</div>';
+    body.innerHTML = rows;
+
+  } else {
+    // Face result
+    const matched = data.fbi_match === true;
+    const badge = matched
+      ? '<span class="result-badge badge-hit">🚨 FBI DATABASE MATCH</span>'
+      : data.fbi_match === false
+        ? '<span class="result-badge badge-clear">✓ NO FBI MATCH</span>'
+        : '<span class="result-badge badge-unknown">⚠ INCONCLUSIVE</span>';
+
+    body.innerHTML = `
+      ${badge}
+      <div class="result-rows">
+        <div class="result-row">
+          <div class="result-row-label">Detection</div>
+          <div class="result-row-value">${data.faces_detected ?? '—'} face(s) detected</div>
+        </div>
+        ${data.match_name ? `<div class="result-row">
+          <div class="result-row-label">Matched Name</div>
+          <div class="result-row-value" style="color:var(--danger)">${esc(data.match_name)}</div>
+        </div>` : ''}
+        ${data.match_details ? `<div class="result-row">
+          <div class="result-row-label">Details</div>
+          <div class="result-row-value" style="font-size:13px">${esc(data.match_details)}</div>
+        </div>` : ''}
+        <div class="result-row" style="border-color:rgba(245,166,35,0.2)">
+          <div class="result-row-label" style="color:var(--warn)">Privacy Notice</div>
+          <div class="result-row-value" style="font-size:12px;color:var(--muted)">Image not stored. Result only.</div>
+        </div>
+      </div>`;
+  }
+}
+
+function renderError(msg) {
+  document.getElementById('resultBody').innerHTML = `
+    <div class="result-rows">
+      <div class="result-row" style="border-color:rgba(255,59,92,0.3)">
+        <div class="result-row-label" style="color:var(--danger)">Error</div>
+        <div class="result-row-value" style="font-size:13px;color:var(--muted)">${esc(msg)}</div>
+      </div>
+    </div>`;
+}
+
+function closeResultCard() {
+  document.getElementById('resultOverlay').classList.remove('open');
+}
+function closeResult(e) {
+  if (e.target === document.getElementById('resultOverlay')) closeResultCard();
+}
+
+// ── History ────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const btn = document.getElementById('btnRefresh');
+  btn.classList.add('spinning');
+
+  try {
+    const res = await fetch('/api/scan/history');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    renderHistory(data.scans || []);
+  } catch (e) {
+    renderHistory([], e.message);
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function renderHistory(scans, err) {
+  const list = document.getElementById('historyList');
+  if (err) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><div class="empty-text" style="color:var(--danger)">${esc(err)}</div></div>`;
+    return;
+  }
+  if (!scans.length) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">No scans yet</div></div>`;
+    return;
+  }
+  list.innerHTML = scans.map(s => {
+    const ts = s.timestamp ? new Date(s.timestamp).toLocaleString() : '—';
+    const hit = s.watchlist_hit === true;
+    return `<div class="history-item">
+      <div class="history-icon plate">🚗</div>
+      <div class="history-content">
+        <div class="history-plate">${esc(s.plate || '???')}</div>
+        <div class="history-meta">${ts}</div>
+      </div>
+      <span class="history-hit ${hit ? 'hit-yes' : 'hit-no'}">${hit ? 'HIT' : 'CLEAR'}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Tabs ───────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  if (tab === 'history') loadHistory();
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function showError(msg) {
+  errorBanner.textContent = msg;
+  errorBanner.style.display = 'block';
+}
+function hideError() {
+  errorBanner.style.display = 'none';
+}
+
+async function checkConnectivity() {
+  try {
+    const r = await fetch('/api/scan/history', { method: 'GET' });
+    statusDot.style.background = r.ok ? 'var(--green)' : 'var(--warn)';
+    statusDot.style.boxShadow  = r.ok ? '0 0 8px var(--green)' : '0 0 8px var(--warn)';
+  } catch {
+    statusDot.style.background = 'var(--danger)';
+    statusDot.style.boxShadow  = '0 0 8px var(--danger)';
+  }
+}
+
+// ── Service Worker ─────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/field-sw.js').catch(() => {});
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+startCamera();
+checkConnectivity();
+setInterval(checkConnectivity, 30000);
+</script>
+</body>
+</html>
