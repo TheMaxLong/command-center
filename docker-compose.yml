@@ -33,6 +33,33 @@ services:
       - WATCHER_PORT=8181
       # AI_MIN_CONF=0.35       # detection confidence threshold (default 0.35)
       # AI_MODEL=yolov8n.pt    # yolov8s.pt for slightly better accuracy
+      # PROFILE_MATCH_THRESH=0.92
+      # PROFILE_MIN_SIGHTINGS=4
+
+  # ── One-shot backfill (run manually, not always-on) ─────────────
+  # Usage:
+  #   docker compose run --rm backfill                       # last 7 days
+  #   docker compose run --rm backfill --days 30             # last 30 days
+  #   docker compose run --rm backfill --start 20260401      # from a date
+  #   docker compose run --rm backfill --cam doorbell        # one camera
+  #   docker compose run --rm backfill --dry-run             # preview only
+  #   docker compose run --rm backfill --list-dates          # what's on SD
+  backfill:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: palm-backfill
+    entrypoint: ["python3", "backfill_tapo.py"]
+    volumes:
+      - ./cameras.yaml:/config/cameras.yaml:ro
+      - vision-data:/data
+      - cam-media:/tmp/cams
+    environment:
+      - TAPO_IP=${TAPO_IP}
+      - TAPO_PASSWORD=${TAPO_PASSWORD}
+      - DB_PATH=/data/events.db
+      - CAMERAS_CONFIG=/config/cameras.yaml
+      - MEDIA_DIR=/tmp/cams
 
 volumes:
   vision-data:
