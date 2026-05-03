@@ -1,0 +1,741 @@
+#!/usr/bin/env python3.12
+"""
+PALM COMMAND — External Intelligence Feeds Engine
+
+Real-time threat awareness from public APIs — no API keys required.
+
+Sources:
+  NWS     — National Weather Service: weather + fire weather alerts
+  USGS    — Seismic activity (Coachella Valley is on the San Andreas fault)
+  CALFIRE — Active wildfire incidents statewide (filtered to region)
+  Citizen — Hyperlocal 911-sourced incidents (crime, fire, EMS, accidents)
+  FEMA    — IPAWS emergency alerts
+
+All feeds are cached and refreshed on background threads.
+Designed to run standalone or be imported by camera_watcher.py.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import threading
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Optional
+
+# ── Home location (override via env vars) ────────────────────────
+HOME_LAT  = float(os.environ.get("HOME_LAT",  "33.8303"))
+HOME_LON  = float(os.environ.get("HOME_LON", "-116.5453"))
+HOME_ZIP  = os.environ.get("HOME_ZIP",  "92262")
+HOME_NAME = os.environ.get("HOME_NAME", "Palm Springs, CA")
+
+# Radius filters (km)
+QUAKE_RADIUS_KM  = float(os.environ.get("QUAKE_RADIUS_KM",  "200"))
+FIRE_RADIUS_KM   = float(os.environ.get("FIRE_RADIUS_KM",   "120"))
+CRIME_RADIUS_DEG = 0.5  # roughly 55km lat/lon degrees
+
+# Cache TTLs (seconds)
+TTL_WEATHER  = 300   # 5 min
+TTL_QUAKE    = 120   # 2 min — seismic can evolve rapidly
+TTL_FIRE     = 600   # 10 min
+TTL_CITIZEN  = 180   # 3 min
+TTL_ALL      = 60    # combined feed min refresh
+
+_USER_AGENT = "PALM-COMMAND/2.0 (home-security; contact=local)"
+
+# ── Data types ────────────────────────────────────────────────────
+
+@dataclass
+class FeedItem:
+    source:    str           # "NWS" | "USGS" | "CALFIRE" | "CITIZEN"
+    severity:  str           # "RED" | "ORANGE" | "YELLOW" | "GREEN" | "INFO"
+    category:  str           # "WEATHER" | "SEISMIC" | "FIRE" | "CRIME" | "EMS" | "POWER" | ...
+    title:     str
+    detail:    str
+    location:  str
+    ts:        float         # unix timestamp
+    distance_km: Optional[float] = None
+    lat:       Optional[float]   = None
+    lon:       Optional[float]   = None
+    url:       Optional[str]     = None
+    raw:       dict              = field(default_factory=dict)
+
+    def to_dict(self) -> dict:
+        return {
+            "source":      self.source,
+            "severity":    self.severity,
+            "category":    self.category,
+            "title":       self.title,
+            "detail":      self.detail,
+            "location":    self.location,
+            "ts":          self.ts,
+            "ts_human":    datetime.fromtimestamp(self.ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+            "distance_km": round(self.distance_km, 1) if self.distance_km else None,
+            "lat":         self.lat,
+            "lon":         self.lon,
+            "url":         self.url,
+        }
+
+
+# ── Utility ───────────────────────────────────────────────────────
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _fetch(url: str, timeout: int = 10, headers: dict | None = None) -> dict | list | None:
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": _USER_AGENT,
+            "Accept": "application/json",
+            **(headers or {}),
+        })
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        print(f"[feeds] fetch error {url[:60]}: {e}", flush=True)
+        return None
+
+
+def _nws_severity(sev: str, urgency: str, certainty: str) -> str:
+    sev = (sev or "").lower()
+    if sev in ("extreme", "severe"):
+        return "RED"
+    if sev == "moderate":
+        return "ORANGE"
+    if urgency and "immediate" in urgency.lower():
+        return "ORANGE"
+    if sev == "minor":
+        return "YELLOW"
+    return "INFO"
+
+
+# ── Feed Cache ────────────────────────────────────────────────────
+
+@dataclass
+class _Cache:
+    items: list[FeedItem] = field(default_factory=list)
+    last_ts: float = 0.0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def stale(self, ttl: float) -> bool:
+        return (time.time() - self.last_ts) > ttl
+
+    def update(self, items: list[FeedItem]):
+        with self.lock:
+            self.items = items
+            self.last_ts = time.time()
+
+    def get(self) -> list[FeedItem]:
+        with self.lock:
+            return list(self.items)
+
+
+_cache_weather  = _Cache()
+_cache_quake    = _Cache()
+_cache_fire     = _Cache()
+_cache_citizen  = _Cache()
+
+
+# ── NWS Weather + Fire Alerts ─────────────────────────────────────
+
+def fetch_weather_alerts() -> list[FeedItem]:
+    """
+    Pull NWS active alerts for the home coordinates.
+    Includes: red flag warnings, fire weather watches, extreme heat, air quality.
+    """
+    url = f"https://api.weather.gov/alerts/active?point={HOME_LAT},{HOME_LON}"
+    data = _fetch(url)
+    if not data:
+        return []
+
+    items: list[FeedItem] = []
+    for feat in data.get("features", []):
+        p = feat.get("properties", {})
+        event     = p.get("event", "Unknown Alert")
+        sev       = p.get("severity", "")
+        urgency   = p.get("urgency", "")
+        certainty = p.get("certainty", "")
+        headline  = p.get("headline", event)
+        desc      = (p.get("description", "") or "")[:300].replace("\n", " ")
+        onset_s   = p.get("onset") or p.get("effective") or ""
+        areas     = p.get("areaDesc", HOME_NAME)
+
+        # Parse onset timestamp
+        try:
+            ts = datetime.fromisoformat(onset_s.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            ts = time.time()
+
+        # Category mapping
+        ev_l = event.lower()
+        if any(w in ev_l for w in ("fire", "red flag", "smoke")):
+            cat = "FIRE_WEATHER"
+        elif any(w in ev_l for w in ("heat", "temperature")):
+            cat = "EXTREME_HEAT"
+        elif "air quality" in ev_l or "smoke" in ev_l:
+            cat = "AIR_QUALITY"
+        elif any(w in ev_l for w in ("dust", "wind", "haboob")):
+            cat = "WIND_DUST"
+        elif any(w in ev_l for w in ("flood", "flash")):
+            cat = "FLOOD"
+        elif any(w in ev_l for w in ("earthquake", "tsunami")):
+            cat = "SEISMIC"
+        else:
+            cat = "WEATHER"
+
+        items.append(FeedItem(
+            source   = "NWS",
+            severity = _nws_severity(sev, urgency, certainty),
+            category = cat,
+            title    = event,
+            detail   = headline if headline != event else desc[:200],
+            location = areas,
+            ts       = ts,
+            distance_km = 0.0,  # NWS alerts are for our zone
+            url      = p.get("@id"),
+            raw      = {"severity": sev, "urgency": urgency, "certainty": certainty},
+        ))
+
+    _cache_weather.update(items)
+    return items
+
+
+def get_weather_alerts() -> list[dict]:
+    if _cache_weather.stale(TTL_WEATHER):
+        fetch_weather_alerts()
+    return [i.to_dict() for i in _cache_weather.get()]
+
+
+# ── USGS Seismic Monitor ─────────────────────────────────────────
+
+def fetch_earthquakes() -> list[FeedItem]:
+    """
+    USGS real-time earthquake feed for Coachella Valley region.
+    The area sits astride the San Andreas and associated fault zones.
+    """
+    url = (
+        f"https://earthquake.usgs.gov/fdsnws/event/1/query"
+        f"?format=geojson"
+        f"&latitude={HOME_LAT}&longitude={HOME_LON}"
+        f"&maxradiuskm={int(QUAKE_RADIUS_KM)}"
+        f"&minmagnitude=1.5"
+        f"&limit=25"
+        f"&orderby=time"
+    )
+    data = _fetch(url)
+    if not data:
+        return []
+
+    items: list[FeedItem] = []
+    for feat in data.get("features", []):
+        p      = feat.get("properties", {})
+        coords = feat.get("geometry", {}).get("coordinates", [None, None, None])
+        mag    = p.get("mag", 0) or 0
+        place  = p.get("place", "Unknown location")
+        ts_ms  = p.get("time", 0) or 0
+        status = p.get("status", "")
+        depth  = coords[2] or 0
+
+        lat = coords[1]
+        lon = coords[0]
+        dist_km = _haversine_km(HOME_LAT, HOME_LON, lat, lon) if lat and lon else None
+
+        # Severity by magnitude
+        if mag >= 5.0:
+            sev = "RED"
+        elif mag >= 4.0:
+            sev = "ORANGE"
+        elif mag >= 3.0:
+            sev = "YELLOW"
+        else:
+            sev = "INFO"
+
+        detail = f"M{mag:.1f} at depth {depth:.0f}km · {place}"
+        if dist_km:
+            detail += f" · {dist_km:.0f}km from home"
+
+        items.append(FeedItem(
+            source      = "USGS",
+            severity    = sev,
+            category    = "SEISMIC",
+            title       = f"M{mag:.1f} Earthquake — {place}",
+            detail      = detail,
+            location    = place,
+            ts          = ts_ms / 1000,
+            distance_km = dist_km,
+            lat         = lat,
+            lon         = lon,
+            url         = p.get("url"),
+            raw         = {"mag": mag, "depth": depth, "status": status},
+        ))
+
+    _cache_quake.update(items)
+    return items
+
+
+def get_earthquakes() -> list[dict]:
+    if _cache_quake.stale(TTL_QUAKE):
+        fetch_earthquakes()
+    return [i.to_dict() for i in _cache_quake.get()]
+
+
+# ── CAL FIRE Active Incidents ─────────────────────────────────────
+
+_CALFIRE_COUNTIES = {
+    "riverside", "san bernardino", "san diego", "imperial",
+    "los angeles", "orange", "ventura", "kern",
+}
+
+def fetch_fire_incidents() -> list[FeedItem]:
+    """
+    CAL FIRE active incident list. Filtered to Southern California counties.
+    Includes acreage, containment %, and location.
+    """
+    url = "https://incidents.fire.ca.gov/umbraco/api/IncidentApi/List?inactive=false"
+    data = _fetch(url, timeout=12)
+    if not data or not isinstance(data, list):
+        return []
+
+    items: list[FeedItem] = []
+    for inc in data:
+        county    = (inc.get("County") or "").lower()
+        name      = inc.get("Name") or "Unknown Fire"
+        acres     = inc.get("AcresBurned") or 0
+        contained = inc.get("PercentContained") or 0
+        admin_u   = inc.get("AdminUnit") or ""
+        started   = inc.get("Started") or ""
+        lat_s     = inc.get("Latitude")
+        lon_s     = inc.get("Longitude")
+        url_link  = inc.get("Url") or ""
+
+        # Filter to our region
+        if county and county not in _CALFIRE_COUNTIES:
+            continue
+
+        lat = float(lat_s) if lat_s else None
+        lon = float(lon_s) if lon_s else None
+        dist_km = _haversine_km(HOME_LAT, HOME_LON, lat, lon) if lat and lon else None
+
+        if dist_km and dist_km > FIRE_RADIUS_KM:
+            continue
+
+        # Parse timestamp
+        try:
+            ts = datetime.fromisoformat(started.replace("Z", "+00:00")).timestamp()
+        except Exception:
+            ts = time.time()
+
+        # Severity by size and containment
+        if acres >= 1000 and contained < 50:
+            sev = "RED"
+        elif acres >= 100 and contained < 75:
+            sev = "ORANGE"
+        elif acres >= 10:
+            sev = "YELLOW"
+        else:
+            sev = "INFO"
+
+        county_title = county.title() if county else "SoCal"
+        detail = f"{acres:,.0f} acres · {contained}% contained · {county_title} County"
+        if dist_km:
+            detail += f" · {dist_km:.0f}km from home"
+        if admin_u:
+            detail += f" [{admin_u}]"
+
+        items.append(FeedItem(
+            source      = "CALFIRE",
+            severity    = sev,
+            category    = "WILDFIRE",
+            title       = f"{name} — {county_title} County",
+            detail      = detail,
+            location    = f"{county_title} County, CA",
+            ts          = ts,
+            distance_km = dist_km,
+            lat         = lat,
+            lon         = lon,
+            url         = url_link or None,
+            raw         = {"acres": acres, "contained": contained, "county": county},
+        ))
+
+    # Sort by severity then distance
+    sev_order = {"RED": 0, "ORANGE": 1, "YELLOW": 2, "INFO": 3}
+    items.sort(key=lambda x: (sev_order.get(x.severity, 9), x.distance_km or 9999))
+    _cache_fire.update(items)
+    return items
+
+
+def get_fire_incidents() -> list[dict]:
+    if _cache_fire.stale(TTL_FIRE):
+        fetch_fire_incidents()
+    return [i.to_dict() for i in _cache_fire.get()]
+
+
+# ── Citizen App — Hyperlocal 911 Incidents ────────────────────────
+
+_CITIZEN_TRENDING = (
+    "https://citizen.com/api/incident/trending"
+    f"?lowerLatitude={HOME_LAT - CRIME_RADIUS_DEG}"
+    f"&lowerLongitude={HOME_LON - CRIME_RADIUS_DEG}"
+    f"&upperLatitude={HOME_LAT + CRIME_RADIUS_DEG}"
+    f"&upperLongitude={HOME_LON + CRIME_RADIUS_DEG}"
+)
+_CITIZEN_INC_URL = "https://citizen.com/api/incident/{key}"
+
+_CITIZEN_HEADERS = {
+    "User-Agent": "citizen/25 CFNetwork/1568.200.51 Darwin/24.1.0",
+    "Accept": "application/json",
+    "x-client-version": "6.0.0",
+}
+
+_CITIZEN_CATEGORY_MAP = {
+    "shooting":     ("SHOOTING",    "RED"),
+    "stabbing":     ("ASSAULT",     "RED"),
+    "robbery":      ("ROBBERY",     "RED"),
+    "assault":      ("ASSAULT",     "ORANGE"),
+    "carjacking":   ("CARJACKING",  "RED"),
+    "pursuit":      ("PURSUIT",     "ORANGE"),
+    "fire":         ("FIRE",        "ORANGE"),
+    "structure fire":("FIRE",       "RED"),
+    "vehicle fire": ("FIRE",        "ORANGE"),
+    "brush fire":   ("FIRE",        "ORANGE"),
+    "ems":          ("EMS",         "YELLOW"),
+    "crash":        ("ACCIDENT",    "YELLOW"),
+    "traffic":      ("ACCIDENT",    "YELLOW"),
+    "power outage": ("UTILITY",     "YELLOW"),
+    "dui":          ("DUI",         "YELLOW"),
+    "burglary":     ("BURGLARY",    "ORANGE"),
+    "theft":        ("THEFT",       "YELLOW"),
+    "suspicious":   ("SUSPICIOUS",  "YELLOW"),
+    "search":       ("SEARCH",      "YELLOW"),
+    "missing":      ("MISSING",     "ORANGE"),
+    "homicide":     ("HOMICIDE",    "RED"),
+    "overdose":     ("EMS",         "YELLOW"),
+    "hazmat":       ("HAZMAT",      "ORANGE"),
+}
+
+_citizen_fetch_lock = threading.Lock()
+
+
+def _classify_citizen(title: str, categories: list) -> tuple[str, str]:
+    t = (title or "").lower()
+    cats = [c.lower() for c in (categories or [])]
+    all_text = t + " " + " ".join(cats)
+    for keyword, (cat, sev) in _CITIZEN_CATEGORY_MAP.items():
+        if keyword in all_text:
+            return cat, sev
+    return "INCIDENT", "INFO"
+
+
+def fetch_citizen_incidents(max_fetch: int = 12) -> list[FeedItem]:
+    """
+    Pull trending Citizen incidents from the area.
+    Fetches the trending index, then individual incident records.
+    Rate-limited to avoid hammering the API.
+    """
+    with _citizen_fetch_lock:
+        trending = _fetch(_CITIZEN_TRENDING, timeout=8, headers=_CITIZEN_HEADERS)
+        if not trending:
+            return []
+
+        incident_ids = trending.get("results", [])
+        if not incident_ids:
+            return []
+
+        items: list[FeedItem] = []
+        now_ts = time.time()
+        cutoff = now_ts - 86400  # only last 24 hours
+
+        for key in incident_ids[:max_fetch]:
+            if not isinstance(key, str):
+                continue
+            url  = _CITIZEN_INC_URL.format(key=key)
+            data = _fetch(url, timeout=6, headers=_CITIZEN_HEADERS)
+            if not data:
+                continue
+
+            ts_ms  = data.get("ts") or data.get("cs") or 0
+            ts     = (ts_ms / 1000) if ts_ms > 1e10 else ts_ms
+            if ts and ts < cutoff:
+                continue
+
+            if data.get("closed"):
+                continue
+
+            title      = data.get("title") or data.get("raw") or "Incident"
+            raw_text   = data.get("raw") or title
+            location   = data.get("rawLocation") or data.get("location") or HOME_NAME
+            nbhd       = data.get("neighborhood") or location
+            lat        = data.get("latitude")
+            lon        = data.get("longitude")
+            sev_raw    = (data.get("severity") or "").lower()
+            categories = data.get("categories") or []
+
+            dist_km = _haversine_km(HOME_LAT, HOME_LON, lat, lon) if lat and lon else None
+
+            cat, sev = _classify_citizen(title, categories)
+
+            # Override severity from Citizen's own field
+            if sev_raw == "red":
+                sev = "RED"
+            elif sev_raw == "orange" and sev not in ("RED",):
+                sev = "ORANGE"
+            elif sev_raw == "yellow" and sev == "INFO":
+                sev = "YELLOW"
+
+            # Latest update text
+            updates = data.get("updates") or {}
+            update_texts = [v.get("text", "") for v in updates.values()
+                            if v.get("type") not in ("ROOT",)]
+            detail = update_texts[-1] if update_texts else raw_text
+            detail = (detail or raw_text)[:300]
+
+            items.append(FeedItem(
+                source      = "CITIZEN",
+                severity    = sev,
+                category    = cat,
+                title       = title,
+                detail      = detail,
+                location    = nbhd,
+                ts          = ts or now_ts,
+                distance_km = dist_km,
+                lat         = lat,
+                lon         = lon,
+                url         = f"https://citizen.com/incident/{key}",
+                raw         = {"key": key, "categories": categories, "sev_raw": sev_raw},
+            ))
+            time.sleep(0.15)  # gentle rate limiting
+
+        # Sort: most severe first, then most recent
+        sev_order = {"RED": 0, "ORANGE": 1, "YELLOW": 2, "INFO": 3}
+        items.sort(key=lambda x: (sev_order.get(x.severity, 9), -(x.ts or 0)))
+        _cache_citizen.update(items)
+        return items
+
+
+def get_citizen_incidents() -> list[dict]:
+    if _cache_citizen.stale(TTL_CITIZEN):
+        fetch_citizen_incidents()
+    return [i.to_dict() for i in _cache_citizen.get()]
+
+
+# ── Combined Feed ─────────────────────────────────────────────────
+
+_all_cache:   list[dict] = []
+_all_cache_ts: float     = 0.0
+_all_lock                = threading.Lock()
+
+
+def get_all_feeds(force: bool = False) -> dict:
+    """
+    Returns all feeds combined with a threat-level summary.
+    Cached for TTL_ALL seconds. Thread-safe.
+    """
+    global _all_cache, _all_cache_ts
+
+    now = time.time()
+    with _all_lock:
+        if not force and (now - _all_cache_ts) < TTL_ALL:
+            return _build_combined(_all_cache)
+
+    # Refresh all caches in parallel
+    results: dict[str, list] = {}
+    errors:  dict[str, str]  = {}
+
+    def _run(name, fn):
+        try:
+            results[name] = fn()
+        except Exception as e:
+            errors[name] = str(e)
+            results[name] = []
+
+    threads = [
+        threading.Thread(target=_run, args=("weather",  fetch_weather_alerts),   daemon=True),
+        threading.Thread(target=_run, args=("quakes",   fetch_earthquakes),       daemon=True),
+        threading.Thread(target=_run, args=("fire",     fetch_fire_incidents),    daemon=True),
+        threading.Thread(target=_run, args=("citizen",  fetch_citizen_incidents), daemon=True),
+    ]
+    for t in threads: t.start()
+    for t in threads: t.join(timeout=20)
+
+    # Merge all items into flat list sorted by severity + recency
+    all_items: list[FeedItem] = []
+    for key in ("weather", "quakes", "fire", "citizen"):
+        cache_map = {
+            "weather":  _cache_weather,
+            "quakes":   _cache_quake,
+            "fire":     _cache_fire,
+            "citizen":  _cache_citizen,
+        }
+        all_items.extend(cache_map[key].get())
+
+    sev_order = {"RED": 0, "ORANGE": 1, "YELLOW": 2, "INFO": 3, "GREEN": 4}
+    all_items.sort(key=lambda x: (sev_order.get(x.severity, 9), -(x.ts or 0)))
+
+    all_dicts = [i.to_dict() for i in all_items]
+    with _all_lock:
+        _all_cache    = all_dicts
+        _all_cache_ts = time.time()
+
+    return _build_combined(all_dicts)
+
+
+def _build_combined(items: list[dict]) -> dict:
+    # Compute threat level
+    sev_counts = {"RED": 0, "ORANGE": 0, "YELLOW": 0, "INFO": 0}
+    for i in items:
+        sev = i.get("severity", "INFO")
+        sev_counts[sev] = sev_counts.get(sev, 0) + 1
+
+    if sev_counts["RED"] > 0:
+        threat = "RED"
+        threat_label = "CRITICAL THREAT LEVEL"
+    elif sev_counts["ORANGE"] >= 2:
+        threat = "ORANGE"
+        threat_label = "ELEVATED THREAT LEVEL"
+    elif sev_counts["ORANGE"] > 0 or sev_counts["YELLOW"] >= 3:
+        threat = "YELLOW"
+        threat_label = "MODERATE THREAT LEVEL"
+    else:
+        threat = "GREEN"
+        threat_label = "NOMINAL CONDITIONS"
+
+    # Nearest significant threat
+    nearest = None
+    for i in items:
+        if i.get("severity") in ("RED", "ORANGE") and i.get("distance_km") is not None:
+            if nearest is None or i["distance_km"] < nearest["distance_km"]:
+                nearest = i
+
+    # Category breakdown
+    cats: dict[str, int] = {}
+    for i in items:
+        c = i.get("category", "OTHER")
+        cats[c] = cats.get(c, 0) + 1
+
+    return {
+        "threat_level":  threat,
+        "threat_label":  threat_label,
+        "severity_counts": sev_counts,
+        "total":         len(items),
+        "category_breakdown": cats,
+        "nearest_threat": nearest,
+        "items":         items,
+        "last_updated":  datetime.now(tz=timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        "location":      HOME_NAME,
+    }
+
+
+# ── Background auto-refresh thread ───────────────────────────────
+
+_bg_thread: threading.Thread | None = None
+_bg_stop   = threading.Event()
+
+
+def start_background_refresh(interval_s: int = 180):
+    """
+    Starts a background thread that refreshes all feeds every interval_s seconds.
+    Call once at startup from camera_watcher.py.
+    """
+    global _bg_thread
+    if _bg_thread and _bg_thread.is_alive():
+        return
+
+    def _loop():
+        print(f"[feeds] Background refresh started (interval={interval_s}s)", flush=True)
+        while not _bg_stop.wait(interval_s):
+            try:
+                get_all_feeds(force=True)
+                print(f"[feeds] Refreshed: {len(_all_cache)} items", flush=True)
+            except Exception as e:
+                print(f"[feeds] Refresh error: {e}", flush=True)
+
+    _bg_thread = threading.Thread(target=_loop, daemon=True, name="feeds-refresh")
+    _bg_thread.start()
+
+
+def stop_background_refresh():
+    _bg_stop.set()
+
+
+# ── Plain-English Summary (for PALANTIR) ─────────────────────────
+
+def generate_briefing() -> str:
+    """
+    Returns a mission-briefing style text summary of all current feeds.
+    Used by the PALANTIR query agent.
+    """
+    data = get_all_feeds()
+    lines = [
+        f"▸ AREA THREAT LEVEL: {data['threat_level']} — {data['threat_label']}",
+        f"▸ LOCATION: {data['location']}",
+        f"▸ {data['total']} active intelligence items · {data['last_updated']}",
+        "",
+    ]
+
+    items = data.get("items", [])
+
+    # Group by source
+    by_source: dict[str, list] = {}
+    for i in items:
+        by_source.setdefault(i["source"], []).append(i)
+
+    if by_source.get("USGS"):
+        quakes = by_source["USGS"]
+        lines.append(f"▸ SEISMIC — {len(quakes)} earthquakes detected in region:")
+        for q in quakes[:4]:
+            lines.append(f"  · {q['title']} — {q['detail']}")
+        if len(quakes) > 4:
+            lines.append(f"  · +{len(quakes)-4} smaller events")
+        lines.append("")
+
+    if by_source.get("NWS"):
+        alerts = by_source["NWS"]
+        lines.append(f"▸ WEATHER/NWS — {len(alerts)} active alert(s):")
+        for a in alerts[:3]:
+            lines.append(f"  · [{a['severity']}] {a['title']}")
+            lines.append(f"    {a['detail'][:120]}")
+        lines.append("")
+
+    if by_source.get("CALFIRE"):
+        fires = by_source["CALFIRE"]
+        lines.append(f"▸ WILDFIRES — {len(fires)} active incident(s):")
+        for f in fires[:4]:
+            dist = f"  {f['distance_km']:.0f}km away · " if f.get("distance_km") else ""
+            lines.append(f"  · [{f['severity']}] {f['title']}")
+            lines.append(f"    {dist}{f['detail'][:120]}")
+        lines.append("")
+
+    if by_source.get("CITIZEN"):
+        incidents = by_source["CITIZEN"]
+        red_orange = [i for i in incidents if i["severity"] in ("RED", "ORANGE")]
+        lines.append(f"▸ LOCAL INCIDENTS (Citizen) — {len(incidents)} total, {len(red_orange)} high-priority:")
+        for i in incidents[:5]:
+            dist = f"{i['distance_km']:.1f}km · " if i.get("distance_km") is not None else ""
+            lines.append(f"  · [{i['severity']}] {i['title']}")
+            lines.append(f"    {dist}{i['location']} — {i['detail'][:100]}")
+        if len(incidents) > 5:
+            lines.append(f"  · +{len(incidents)-5} additional incidents in area")
+        lines.append("")
+
+    if not items:
+        lines.append("▸ NO ACTIVE INTELLIGENCE — All clear. Feeds nominal.")
+
+    return "\n".join(lines)
+
+
+# ── CLI test ──────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    print(f"Fetching intelligence feeds for {HOME_NAME} ({HOME_LAT}, {HOME_LON})")
+    print("=" * 70)
+    text = generate_briefing()
+    print(text)

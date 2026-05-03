@@ -33,6 +33,8 @@ import profiler
 import trend_analyzer
 import intel_engine
 import query_agent
+import intel_feeds
+import lpr_engine
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -137,10 +139,25 @@ def _run_ai_and_store(
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
 
-    # ── Person tracking: enrich detections with track_id, direction, dwell_s
+    # ── Person tracking: Kalman filter + Hungarian assignment (ByteTrack)
     if detections:
-        tracker   = ai_engine.get_tracker(cam_id)
-        detections = tracker.update(detections, event_ts)
+        try:
+            import tracker_kalman
+            tracker    = tracker_kalman.get_tracker(cam_id)
+            detections = tracker.update(detections, event_ts)
+        except Exception as te:
+            # Fallback to legacy IoU tracker if Kalman fails
+            tracker    = ai_engine.get_tracker(cam_id)
+            detections = tracker.update(detections, event_ts)
+
+    # ── License plate recognition on vehicle detections
+    if snap_path and detections:
+        vehicle_dets = [d for d in detections if d.get("class") in ("car","truck","bus","motorcycle")]
+        if vehicle_dets:
+            try:
+                lpr_engine.process_snapshot(snap_path, vehicle_dets, cam_id, event_ts)
+            except Exception as le:
+                print(f"[lpr] error: {le}", flush=True)
 
     event_id = event_db.insert_event(cam_id, event_ts, clip_path, snap_path)
     if detections:
@@ -516,6 +533,43 @@ class Handler(BaseHTTPRequestHandler):
             camera = qp("camera")
             self._json(trend_analyzer.velocity(camera))
 
+        # /feeds              → all intel feeds combined
+        elif p == "/feeds":
+            self._json(intel_feeds.get_all_feeds())
+
+        # /feeds/earthquakes  → USGS seismic data
+        elif p == "/feeds/earthquakes":
+            self._json({"items": intel_feeds.get_earthquakes(),
+                        "count": len(intel_feeds.get_earthquakes())})
+
+        # /feeds/weather      → NWS alerts
+        elif p == "/feeds/weather":
+            self._json({"items": intel_feeds.get_weather_alerts(),
+                        "count": len(intel_feeds.get_weather_alerts())})
+
+        # /feeds/fire         → CAL FIRE incidents
+        elif p == "/feeds/fire":
+            self._json({"items": intel_feeds.get_fire_incidents(),
+                        "count": len(intel_feeds.get_fire_incidents())})
+
+        # /feeds/crime        → Citizen app local incidents
+        elif p == "/feeds/crime":
+            self._json({"items": intel_feeds.get_citizen_incidents(),
+                        "count": len(intel_feeds.get_citizen_incidents())})
+
+        # /feeds/plates       → LPR plate log
+        elif p == "/feeds/plates":
+            camera = qp("camera")
+            limit  = int(qp("limit") or 50)
+            self._json({
+                "plates":  lpr_engine.get_plate_log(camera, limit),
+                "unique":  lpr_engine.get_unique_plates(24),
+            })
+
+        # /feeds/briefing     → plain-English threat summary
+        elif p == "/feeds/briefing":
+            self._json({"briefing": intel_feeds.generate_briefing()})
+
         else:
             self._not_found()
 
@@ -644,6 +698,10 @@ async def main() -> None:
     event_db.init_db()
     cam_cfgs = load_config()
     print(f"[watcher] Starting with {len(cam_cfgs)} camera(s)", flush=True)
+
+    # Start intelligence feeds background refresh
+    intel_feeds.start_background_refresh(interval_s=180)
+    print("[watcher] Intel feeds refresh started", flush=True)
 
     for cfg in cam_cfgs:
         cameras[cfg["id"]] = CameraState(id=cfg["id"], name=cfg["name"])

@@ -35,6 +35,17 @@ from typing import Optional
 import event_db
 import trend_analyzer
 
+# ── Optional: intel feeds (loaded lazily to avoid startup errors) ──
+_feeds_available = False
+def _get_feeds():
+    global _feeds_available
+    try:
+        import intel_feeds as _if
+        _feeds_available = True
+        return _if
+    except Exception:
+        return None
+
 # ── Optional LLM backend ──────────────────────────────────────────
 _LLM_CLIENT   = None
 _LLM_PROVIDER = None
@@ -149,21 +160,33 @@ def _extract_condition(text: str) -> str:
 # ── Intent classification ─────────────────────────────────────────
 
 _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
-    ("summary",       ["briefing", "summary", "what happened", "update me", "status", "report", "overview"]),
-    ("who_today",     ["who was here", "who came", "who visited", "who showed up", "who appeared"]),
-    ("stranger_check",["stranger", "unknown", "unfamiliar", "never seen", "new person", "new visitor"]),
-    ("anomaly_check", ["unusual", "anomaly", "anomalies", "weird", "abnormal", "suspicious", "odd"]),
-    ("velocity",      ["trend", "increasing", "decreasing", "more activity", "velocity", "getting busier"]),
-    ("camera_compare",["which camera", "busiest cam", "most active camera", "camera comparison"]),
-    ("count_query",   ["how many", "count", "number of", "total events", "total people"]),
-    ("time_query",    ["at 12", "at 1", "at 2", "at 3", "at 4", "at 5", "at 6", "at 7", "at 8",
-                       "at 9", "at 10", "at 11", "overnight", "midnight", "noon", "morning",
-                       "afternoon", "evening", "night", "between", "from "]),
-    ("recent_events", ["recent", "latest", "last event", "last 5", "last 10", "what's been", "what has been"]),
-    ("person_info",   ["tell me about", "who is", "profile", "regular-", "unknown-", "information on"]),
-    ("watchlist_add", ["alert me", "notify me", "watch for", "flag", "tell me when", "ping me"]),
-    ("watchlist_show",["watchlist", "rules", "active alerts", "my alerts", "what are you watching"]),
-    ("help",          ["help", "what can you do", "commands", "options", "capabilities"]),
+    ("summary",        ["briefing", "summary", "what happened", "update me", "status", "report", "overview"]),
+    ("who_today",      ["who was here", "who came", "who visited", "who showed up", "who appeared"]),
+    ("stranger_check", ["stranger", "unknown", "unfamiliar", "never seen", "new person", "new visitor"]),
+    ("anomaly_check",  ["unusual", "anomaly", "anomalies", "weird", "abnormal", "suspicious", "odd"]),
+    ("velocity",       ["trend", "increasing", "decreasing", "more activity", "velocity", "getting busier"]),
+    ("camera_compare", ["which camera", "busiest cam", "most active camera", "camera comparison"]),
+    ("count_query",    ["how many", "count", "number of", "total events", "total people"]),
+    ("time_query",     ["at 12", "at 1", "at 2", "at 3", "at 4", "at 5", "at 6", "at 7", "at 8",
+                        "at 9", "at 10", "at 11", "overnight", "midnight", "noon", "morning",
+                        "afternoon", "evening", "night", "between", "from "]),
+    ("recent_events",  ["recent", "latest", "last event", "last 5", "last 10", "what's been", "what has been"]),
+    ("person_info",    ["tell me about", "who is", "profile", "regular-", "unknown-", "information on"]),
+    ("watchlist_add",  ["alert me", "notify me", "watch for", "flag", "tell me when", "ping me"]),
+    ("watchlist_show", ["watchlist", "rules", "active alerts", "my alerts", "what are you watching"]),
+    # ── External intelligence feeds ──────────────────────────────────
+    ("earthquake",     ["earthquake", "quake", "seismic", "tremor", "fault", "shaking", "richter", "magnitude"]),
+    ("weather_alert",  ["weather alert", "fire weather", "red flag", "air quality", "aqi", "heat warning",
+                        "wind advisory", "dust storm", "extreme heat", "nws alert", "haboob"]),
+    ("fire_intel",     ["calfire", "wildfire", "brush fire", "structure fire", "fire near", "cal fire",
+                        "active fire", "fire incident", "acres burning", "containment"]),
+    ("local_incidents",["local crime", "citizen", "nearby incident", "neighborhood", "what's happening near",
+                        "crime near", "shooting near", "robbery", "police near", "ems near",
+                        "911 near", "incident near", "local incident", "area crime"]),
+    ("area_threat",    ["threat level", "area threat", "threat assessment", "danger level", "safe",
+                        "how safe", "area status", "local threat", "anything dangerous", "any danger"]),
+    ("plates",         ["license plate", "plate", "lpr", "vehicle plate", "plates seen", "plate log"]),
+    ("help",           ["help", "what can you do", "commands", "options", "capabilities"]),
 ]
 
 
@@ -490,6 +513,144 @@ def _handle_watchlist_show(text: str, camera_id: Optional[str]) -> dict:
     return {"intent": "watchlist_show", "answer": answer, "data": {"rules": rules}}
 
 
+def _handle_earthquake(text: str, camera_id: Optional[str]) -> dict:
+    feeds = _get_feeds()
+    if not feeds:
+        return {"intent": "earthquake", "answer": "▸ Intel feeds module unavailable.", "data": {}}
+    items = feeds.get_earthquakes()
+    if not items:
+        return {"intent": "earthquake",
+                "answer": "▸ No earthquakes detected in the last data pull.\n▸ USGS monitoring active for 200km radius.",
+                "data": {"count": 0}}
+    lines = [f"▸ SEISMIC REPORT — {len(items)} earthquake(s) within monitoring radius:"]
+    for q in items[:8]:
+        mag    = q["raw"].get("mag", "?")
+        depth  = q["raw"].get("depth", "?")
+        dist   = f" · {q['distance_km']:.0f}km from home" if q.get("distance_km") else ""
+        age_h  = (time.time() - q["ts"]) / 3600
+        age_s  = f"{age_h:.1f}h ago" if age_h < 24 else f"{age_h/24:.1f}d ago"
+        sev    = q["severity"]
+        lines.append(f"  [{sev}] M{mag} — {q['location']}")
+        lines.append(f"    Depth {depth:.0f}km{dist} · {age_s}")
+    big = [q for q in items if (q["raw"].get("mag") or 0) >= 3.0]
+    if big:
+        lines.append(f"\n▸ ⚠ {len(big)} event(s) M3.0+ detected. Monitor aftershock sequence.")
+    else:
+        lines.append("\n▸ No significant events (M3.0+). Microseismic activity nominal.")
+    ctx = f"Earthquakes:\n" + "\n".join(f"M{q['raw'].get('mag',0)} {q['location']}" for q in items[:5])
+    llm = _llm_query(text, ctx)
+    return {"intent": "earthquake", "answer": llm or "\n".join(lines), "data": {"items": items}}
+
+
+def _handle_weather_alert(text: str, camera_id: Optional[str]) -> dict:
+    feeds = _get_feeds()
+    if not feeds:
+        return {"intent": "weather_alert", "answer": "▸ Intel feeds module unavailable.", "data": {}}
+    items = feeds.get_weather_alerts()
+    if not items:
+        return {"intent": "weather_alert",
+                "answer": "▸ No active NWS alerts for your area.\n▸ Atmospheric conditions: nominal.",
+                "data": {"count": 0}}
+    lines = [f"▸ NWS ACTIVE ALERTS — {len(items)} alert(s) for {intel_feeds_loc()}:"]
+    for a in items:
+        lines.append(f"\n  [{a['severity']}] {a['title']}")
+        lines.append(f"    {a['detail'][:200]}")
+        lines.append(f"    Area: {a['location'][:80]}")
+    ctx = "\n".join(f"[{a['severity']}] {a['title']}: {a['detail'][:100]}" for a in items)
+    llm = _llm_query(text, ctx)
+    return {"intent": "weather_alert", "answer": llm or "\n".join(lines), "data": {"items": items}}
+
+
+def _handle_fire_intel(text: str, camera_id: Optional[str]) -> dict:
+    feeds = _get_feeds()
+    if not feeds:
+        return {"intent": "fire_intel", "answer": "▸ Intel feeds module unavailable.", "data": {}}
+    items = feeds.get_fire_incidents()
+    if not items:
+        return {"intent": "fire_intel",
+                "answer": "▸ No active CAL FIRE incidents in SoCal region.\n▸ Fire threat: NOMINAL.",
+                "data": {"count": 0}}
+    lines = [f"▸ CAL FIRE ACTIVE — {len(items)} incident(s) in region:"]
+    for f in items[:6]:
+        dist  = f" · {f['distance_km']:.0f}km from home" if f.get("distance_km") else ""
+        lines.append(f"\n  [{f['severity']}] {f['title']}")
+        lines.append(f"    {f['detail'][:150]}{dist}")
+    red = [f for f in items if f["severity"] == "RED"]
+    if red:
+        lines.append(f"\n▸ ⚠ {len(red)} CRITICAL fire(s) — review evacuation routes.")
+    ctx = "\n".join(f"[{f['severity']}] {f['title']}: {f['detail'][:100]}" for f in items)
+    llm = _llm_query(text, ctx)
+    return {"intent": "fire_intel", "answer": llm or "\n".join(lines), "data": {"items": items}}
+
+
+def _handle_local_incidents(text: str, camera_id: Optional[str]) -> dict:
+    feeds = _get_feeds()
+    if not feeds:
+        return {"intent": "local_incidents", "answer": "▸ Intel feeds module unavailable.", "data": {}}
+    items = feeds.get_citizen_incidents()
+    if not items:
+        return {"intent": "local_incidents",
+                "answer": "▸ No active Citizen incidents in your area.\n▸ Local conditions appear nominal.",
+                "data": {"count": 0}}
+    red_orange = [i for i in items if i["severity"] in ("RED", "ORANGE")]
+    lines = [f"▸ LOCAL INCIDENTS (Citizen/911) — {len(items)} active · {len(red_orange)} high-priority:"]
+    for inc in items[:8]:
+        dist  = f"{inc['distance_km']:.1f}km · " if inc.get("distance_km") is not None else ""
+        age_m = int((time.time() - inc["ts"]) / 60) if inc.get("ts") else 0
+        age_s = f"{age_m}m ago" if age_m < 60 else f"{age_m//60}h ago"
+        lines.append(f"\n  [{inc['severity']}] {inc['category']} — {inc['title']}")
+        lines.append(f"    {dist}{inc['location']} · {age_s}")
+        if inc.get("detail") and inc["detail"] != inc["title"]:
+            lines.append(f"    {inc['detail'][:120]}")
+    ctx = "\n".join(f"[{i['severity']}] {i['category']} {i['title']} @ {i['location']}" for i in items[:6])
+    llm = _llm_query(text, ctx)
+    return {"intent": "local_incidents", "answer": llm or "\n".join(lines), "data": {"items": items}}
+
+
+def _handle_area_threat(text: str, camera_id: Optional[str]) -> dict:
+    feeds = _get_feeds()
+    if not feeds:
+        return {"intent": "area_threat", "answer": "▸ Intel feeds module unavailable.", "data": {}}
+    data    = feeds.get_all_feeds()
+    briefing = feeds.generate_briefing()
+    llm = _llm_query(text, briefing[:800])
+    return {"intent": "area_threat", "answer": llm or briefing, "data": data}
+
+
+def _handle_plates(text: str, camera_id: Optional[str]) -> dict:
+    try:
+        import lpr_engine
+        plates = lpr_engine.get_plate_log(camera_id, limit=30)
+        unique = lpr_engine.get_unique_plates(24)
+    except Exception:
+        return {"intent": "plates", "answer": "▸ LPR engine unavailable.", "data": {}}
+    if not plates:
+        return {"intent": "plates",
+                "answer": "▸ No license plates logged yet.\n▸ LPR will activate automatically when vehicles are detected on camera.",
+                "data": {"count": 0}}
+    lines = [f"▸ LICENSE PLATE LOG — {len(unique)} unique plate(s) in last 24h:"]
+    flagged = [p for p in unique if p.get("flagged")]
+    if flagged:
+        lines.append(f"▸ ⚠ {len(flagged)} FLAGGED PLATE(S) DETECTED:")
+        for p in flagged:
+            lines.append(f"  🚨 {p['plate']} ({p['vehicle_class']}) · {p['camera']} · conf {p['confidence']:.0%}")
+    for p in unique[:10]:
+        label   = f" [{p['label']}]" if p.get("label") else ""
+        flagged_tag = " ⚠FLAGGED" if p.get("flagged") else ""
+        age_m   = int((time.time() - p["ts"]) / 60) if p.get("ts") else 0
+        age_s   = f"{age_m}m ago" if age_m < 60 else f"{age_m//60}h ago"
+        lines.append(f"  {p['plate']}{label}{flagged_tag} · {p['vehicle_class']} · {p['camera']} · {age_s}")
+    return {"intent": "plates", "answer": "\n".join(lines), "data": {"plates": unique}}
+
+
+def intel_feeds_loc() -> str:
+    try:
+        import intel_feeds
+        return intel_feeds.HOME_NAME
+    except Exception:
+        return "your area"
+
+
 def _handle_help(text: str, camera_id: Optional[str]) -> dict:
     answer = """▸ PALANTIR — PALM COMMAND AI AGENT
 
@@ -515,8 +676,18 @@ WATCHLIST / RULES:
   "Notify me if 3 or more people"
   "Show my watchlist"
 
+EXTERNAL INTELLIGENCE (live data):
+  "Any earthquakes nearby"
+  "Seismic activity report"
+  "Any weather alerts / red flag warning"
+  "Active wildfires near me"
+  "Local crime / what's happening in the area"
+  "Area threat level / how safe is it"
+  "License plates seen today"
+
 MISSION INTEL:
-  Powered by PALM COMMAND database · rule-based NLP
+  Powered by PALM COMMAND database + NWS · USGS · CAL FIRE · Citizen
+  Kalman filter tracking · LPR active on vehicle detections
   Set OPENAI_API_KEY or ANTHROPIC_API_KEY for LLM upgrade"""
     return {"intent": "help", "answer": answer, "data": {}}
 
@@ -579,6 +750,13 @@ def query(
         "person_info":    _handle_person_info,
         "watchlist_add":  _handle_watchlist_add,
         "watchlist_show": _handle_watchlist_show,
+        # External intelligence feeds
+        "earthquake":      _handle_earthquake,
+        "weather_alert":   _handle_weather_alert,
+        "fire_intel":      _handle_fire_intel,
+        "local_incidents": _handle_local_incidents,
+        "area_threat":     _handle_area_threat,
+        "plates":          _handle_plates,
         "help":           _handle_help,
         "general":        _handle_general,
     }
