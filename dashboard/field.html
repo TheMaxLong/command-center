@@ -569,6 +569,14 @@
 </div>
 
 <script>
+// Nuke any stale service worker registrations immediately
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(regs => {
+    regs.forEach(r => r.unregister());
+  });
+  caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 let stream = null;
 let currentScanType = null;
