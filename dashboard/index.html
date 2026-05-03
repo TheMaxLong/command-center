@@ -944,11 +944,11 @@
         <div class="tile-label">FRONT CAM</div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
-          <span class="monitor-btn" title="Open in monitor mode">⊞</span>
+          <a class="monitor-btn" href="/monitor?cam=front_cam" target="_blank" onclick="event.stopPropagation()" title="Open in monitor mode">⊞ MONITOR</a>
         </div>
       </div>
       <div class="tile-body" style="position:relative;">
-        <iframe src="/go2rtc/stream.html?src=front_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <iframe id="front-iframe" src="/go2rtc/stream.html?src=front_cam&mode=mp4,mjpeg" allowfullscreen allow="autoplay; fullscreen"></iframe>
         <div class="tile-badge badge-live">LIVE</div>
         <div class="scene-summary" id="front-summary" style="display:none"></div>
         <div id="front-det-bar"></div>
@@ -961,7 +961,7 @@
         <div class="tile-label">DOORBELL · D210</div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div class="tile-meta" id="bell-meta">STANDBY</div>
-          <span class="monitor-btn" title="Open in monitor mode">⊞</span>
+          <a class="monitor-btn" href="/monitor?cam=doorbell" target="_blank" onclick="event.stopPropagation()" title="Open in monitor mode">⊞ MONITOR</a>
         </div>
       </div>
       <div class="tile-body" style="background:#000;position:relative;">
