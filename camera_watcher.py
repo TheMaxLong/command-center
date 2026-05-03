@@ -39,6 +39,10 @@ import gait_engine
 import face_intel
 import pattern_engine
 import traffic_cam
+import camera_adapters
+import camera_discover
+import entity_resolution
+import forward_intel
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -217,6 +221,20 @@ def _run_ai_and_store(
             msg = f"Unknown person on {cam_id.upper()} during off-peak hours"
             event_db.insert_alert("stranger", "warn", msg, cam_id, event_ts)
             print(f"[intel] ALERT: {msg}", flush=True)
+
+    # ── Entity resolution: fuse face + gait + appearance into single identity
+    if profile_ids:
+        try:
+            resolver = entity_resolution.get_resolver()
+            for i, pid in enumerate(profile_ids):
+                d = detections[i] if i < len(detections) else {}
+                fv = (d.get("face_match") or {}).get("vec") or d.get("face_vec")
+                gv = d.get("gait_vec")
+                ap = d.get("appearance")
+                resolver.observe(profile_id=str(pid), camera=cam_id, ts=event_ts,
+                                 face_vec=fv, gait_vec=gv, appearance=ap)
+        except Exception as ee:
+            print(f"[entity_res] error: {ee}", flush=True)
 
     # ── Pattern-of-life threat scoring for each confirmed person
     if profile_ids:
@@ -407,6 +425,59 @@ async def go2rtc_poll_loop(cam_cfg: dict) -> None:
         except Exception as e:
             print(f"[{cam_id}] go2rtc AI error: {e}", flush=True)
             state.online = False
+
+
+# ── Universal adapter watcher (any registered vendor) ─────────────
+
+async def adapter_poll_loop(cam_cfg: dict) -> None:
+    """Snapshot-poll loop driven by the camera_adapters registry.
+
+    Works for ANY vendor with a registered adapter (hikvision, reolink,
+    amcrest, onvif, mjpeg, http_snap, wyze, usb, bluetooth, etc.).
+    Snapshot interval is set by `ai_interval` in cameras.yaml (default 8s).
+    """
+    cam_id   = cam_cfg["id"]
+    interval = float(cam_cfg.get("ai_interval", 8))
+    state    = cameras[cam_id]
+    snap     = media_path(cam_id, "snap")
+
+    adapter = camera_adapters.build_adapter(cam_cfg)
+    if adapter is None:
+        print(f"[{cam_id}] No adapter for type={cam_cfg.get('type')} — skipping", flush=True)
+        return
+
+    print(f"[{cam_id}] {adapter.vendor} adapter @ {adapter.ip}:{adapter.port} every {interval}s "
+          f"caps={adapter.capabilities()}", flush=True)
+
+    loop = asyncio.get_event_loop()
+    fail_streak = 0
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            data = await loop.run_in_executor(None, adapter.snapshot)
+            if not data or len(data) < 512:
+                fail_streak += 1
+                state.online = False
+                if fail_streak == 1:
+                    print(f"[{cam_id}] {adapter.vendor} snapshot empty/short", flush=True)
+                continue
+            fail_streak = 0
+            snap.parent.mkdir(parents=True, exist_ok=True)
+            snap.write_bytes(data)
+            state.online    = True
+            state.last_seen = time.time()
+            event_ts        = state.last_seen
+
+            # Run the entire AI pipeline in a worker thread so the event
+            # loop is never blocked by detection/annotation/face/gait/entity calls
+            await loop.run_in_executor(None, _run_ai_and_store,
+                                       cam_id, event_ts, None, str(snap))
+
+        except Exception as e:
+            fail_streak += 1
+            state.online = False
+            if fail_streak <= 2:
+                print(f"[{cam_id}] adapter error: {e}", flush=True)
 
 
 # ── RTSP camera watcher ───────────────────────────────────────────
@@ -686,6 +757,78 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/trafficcam/status":
             self._json(traffic_cam.get_status())
 
+        # ─── Camera framework: adapters + discovery ────────────────────
+        elif p == "/api/adapters":
+            self._json({
+                "adapters":  camera_adapters.list_adapters(),
+                "summary":   camera_adapters.adapter_summary(),
+            })
+
+        elif p == "/api/discover":
+            qs     = parse_qs(parsed.query)
+            subnet = qs.get("subnet", [None])[0]
+            try:
+                found = camera_discover.discover_all(subnet=subnet, timeout=3.0)
+                self._json({
+                    "count":   len(found),
+                    "cameras": [c.__dict__ for c in found],
+                    "yaml":    camera_discover.to_yaml_block(found),
+                })
+            except Exception as e:
+                self._json({"error": str(e), "count": 0, "cameras": []})
+
+        elif p == "/api/discover/yaml":
+            try:
+                found = camera_discover.discover_all()
+                body  = camera_discover.to_yaml_block(found).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/yaml")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+            except Exception:
+                self._not_found()
+
+        # ─── Entity resolution endpoints ───────────────────────────────
+        elif p == "/intel/entities":
+            r = entity_resolution.get_resolver()
+            self._json({
+                "stats":    r.stats(),
+                "entities": r.all_entities(limit=100),
+                "briefing": entity_resolution.briefing(),
+            })
+
+        elif parsed.path.startswith("/intel/entity/"):
+            eid = parsed.path.split("/intel/entity/", 1)[1].rstrip("/")
+            if not eid or len(eid) > 64 or not all(c.isalnum() or c in "-_" for c in eid):
+                self._not_found(); return
+            detail = entity_resolution.get_resolver().entity_detail(eid)
+            if not detail:
+                self._not_found(); return
+            self._json(detail)
+
+        elif p == "/intel/merge_log":
+            self._json({
+                "log": entity_resolution.get_resolver().merge_log(limit=50),
+            })
+
+        # ─── Forward intelligence endpoints ─────────────────────────────
+        elif p == "/intel/forecast":
+            self._json({
+                "scenarios": forward_intel.build_scenarios(),
+                "briefing":  forward_intel.forecast_briefing(),
+            })
+
+        elif p == "/intel/behavior":
+            self._json({"briefing": forward_intel.behavior_briefing()})
+
+        elif parsed.path.startswith("/intel/classify/"):
+            eid = parsed.path.split("/intel/classify/", 1)[1].rstrip("/")
+            if not eid or len(eid) > 64 or not all(c.isalnum() or c in "-_" for c in eid):
+                self._not_found(); return
+            self._json(forward_intel.classify_entity(eid))
+
         else:
             self._not_found()
 
@@ -834,6 +977,16 @@ async def main() -> None:
         pass
     print("[watcher] Pattern-of-life engine initialized", flush=True)
 
+    # Initialize entity resolution
+    try:
+        entity_resolution.get_resolver()
+    except Exception as e:
+        print(f"[watcher] entity_resolution init failed: {e}", flush=True)
+    print("[watcher] Entity resolution engine initialized", flush=True)
+
+    # Log adapter registry
+    print(f"[watcher] {len(camera_adapters.list_adapters())} camera adapters registered", flush=True)
+
     for cfg in cam_cfgs:
         cameras[cfg["id"]] = CameraState(id=cfg["id"], name=cfg["name"])
 
@@ -846,14 +999,21 @@ async def main() -> None:
     tasks = []
     for cfg in cam_cfgs:
         ctype = cfg.get("type", "tapo")
+        # Built-in fast-path watchers (high-frequency motion detection)
         if ctype == "tapo":
             tasks.append(asyncio.create_task(tapo_poll_loop(cfg)))
         elif ctype == "rtsp":
             tasks.append(asyncio.create_task(rtsp_poll_loop(cfg)))
         elif ctype == "go2rtc":
             tasks.append(asyncio.create_task(go2rtc_poll_loop(cfg)))
+        # Universal adapter path: any registered vendor (hikvision, reolink, amcrest,
+        # onvif, mjpeg, http_snap, wyze, usb, bluetooth, ring, etc.)
+        elif camera_adapters.get_adapter(ctype) is not None:
+            tasks.append(asyncio.create_task(adapter_poll_loop(cfg)))
         else:
-            print(f"[{cfg['id']}] Unknown camera type '{ctype}' — skipped", flush=True)
+            print(f"[{cfg['id']}] Unknown camera type '{ctype}' — skipped"
+                  f"  (registered: {sorted([a['vendor'] for a in camera_adapters.list_adapters()])})",
+                  flush=True)
 
     await asyncio.gather(*tasks)
 

@@ -173,6 +173,18 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
                         "when do they come", "next visit", "expected arrival", "overdue visitor"]),
     ("threat_score",   ["threat score", "risk score", "score profile", "danger score",
                         "score this person", "score them", "risk level profile"]),
+    ("forecast",       ["forecast", "scenario", "scenarios", "forward intel", "forward intelligence",
+                        "predict threat", "what's coming", "what is coming", "pre-attack",
+                        "scouting", "convergence", "absence", "anomalous absence",
+                        "loitering", "intruder alert"]),
+    ("behavior",       ["classify", "behavior", "behaviour", "what kind of person", "type of visitor",
+                        "behavior class", "tag entity", "loiterer", "lookout", "runner"]),
+    ("entities",       ["entity resolution", "entities", "fused identity", "merge log",
+                        "identity fusion", "who is who", "resolved identities"]),
+    ("discover",       ["discover camera", "find cameras", "scan network", "auto-detect cameras",
+                        "camera discovery", "network scan", "what cameras", "detect cameras"]),
+    ("adapters",       ["camera adapter", "adapters", "supported camera", "what cameras support",
+                        "camera vendor", "vendor list", "supported vendors", "camera brands"]),
     # ── External intelligence feeds ──────────────────────────────────
     ("earthquake",     ["earthquake", "quake", "seismic", "tremor", "fault", "shaking", "richter", "magnitude"]),
     ("weather_alert",  ["weather alert", "fire weather", "red flag", "air quality", "aqi", "heat warning",
@@ -819,6 +831,73 @@ def _handle_predictions(text: str, camera_id) -> dict:
         return {"intent": "predictions", "answer": f"▸ Prediction engine unavailable: {e}", "data": {}}
 
 
+def _handle_forecast(text: str, camera_id) -> dict:
+    try:
+        import forward_intel as _fi
+        scenarios = _fi.build_scenarios()
+        return {"intent": "forecast", "answer": _fi.forecast_briefing(),
+                "data": {"scenarios": scenarios, "count": len(scenarios)}}
+    except Exception as e:
+        return {"intent": "forecast", "answer": f"▸ Forecast engine error: {e}", "data": {}}
+
+
+def _handle_behavior(text: str, camera_id) -> dict:
+    try:
+        import forward_intel as _fi
+        m = re.search(r"(regular[- ]?\d+|unknown[- ]?\d+|e\d{6,}|profile[- ]?\d+)", text.lower())
+        if m:
+            eid = m.group(1).upper().replace(" ", "-")
+            classification = _fi.classify_entity(eid)
+            lines = [
+                f"▸ BEHAVIOR CLASSIFICATION — {eid}",
+                f"▸ Class: {classification['class'].upper()}  ({int(classification['confidence']*100)}%)",
+                f"▸ Sightings: {classification.get('sightings',0)} across {len(classification.get('cameras',[]))} camera(s)",
+            ]
+            if classification.get("evidence"):
+                lines.append("▸ Evidence:")
+                for ev in classification["evidence"]:
+                    lines.append(f"  · {ev}")
+            return {"intent": "behavior", "answer": "\n".join(lines), "data": classification}
+        return {"intent": "behavior", "answer": _fi.behavior_briefing(), "data": {}}
+    except Exception as e:
+        return {"intent": "behavior", "answer": f"▸ Behavior engine error: {e}", "data": {}}
+
+
+def _handle_entities(text: str, camera_id) -> dict:
+    try:
+        import entity_resolution as _er
+        r = _er.get_resolver()
+        if "merge log" in text.lower() or "merge" in text.lower():
+            log = r.merge_log(limit=20)
+            lines = [f"▸ ENTITY MERGE LOG — {len(log)} entries"]
+            for m in log[:15]:
+                rev = "✓" if m["reviewed"] else "?"
+                lines.append(f"  [{rev}] {m['from']} → {m['into']}  score={m['score']:.2f}  "
+                             f"[{','.join(m['modalities'][:3])}]")
+            return {"intent": "entities", "answer": "\n".join(lines), "data": {"log": log}}
+        return {"intent": "entities", "answer": _er.briefing(),
+                "data": {"stats": r.stats(), "entities": r.all_entities(20)}}
+    except Exception as e:
+        return {"intent": "entities", "answer": f"▸ Entity resolution error: {e}", "data": {}}
+
+
+def _handle_discover(text: str, camera_id) -> dict:
+    try:
+        import camera_discover as _cd
+        return {"intent": "discover", "answer": _cd.discovery_briefing(), "data": {}}
+    except Exception as e:
+        return {"intent": "discover", "answer": f"▸ Discovery engine error: {e}", "data": {}}
+
+
+def _handle_adapters(text: str, camera_id) -> dict:
+    try:
+        import camera_adapters as _ca
+        return {"intent": "adapters", "answer": _ca.adapter_summary(),
+                "data": {"adapters": _ca.list_adapters()}}
+    except Exception as e:
+        return {"intent": "adapters", "answer": f"▸ Adapter registry error: {e}", "data": {}}
+
+
 def _handle_threat_score(text: str, camera_id) -> dict:
     try:
         import pattern_engine as _pe
@@ -994,6 +1073,12 @@ def query(
         "pattern_intel":   _handle_pattern_intel,
         "predictions":     _handle_predictions,
         "threat_score":    _handle_threat_score,
+        # Forward intel + entity resolution + camera framework
+        "forecast":        _handle_forecast,
+        "behavior":        _handle_behavior,
+        "entities":        _handle_entities,
+        "discover":        _handle_discover,
+        "adapters":        _handle_adapters,
         "help":           _handle_help,
         "general":        _handle_general,
     }

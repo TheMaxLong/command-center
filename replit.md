@@ -29,12 +29,27 @@ PALM COMMAND is a home security AI surveillance system ("Situational Awareness S
 - **`pattern_engine.py`** — Pattern-of-Life & Entity Relationship Engine: per-entity behavioral models (hour/day distributions, dwell time, camera frequency), predictive arrival forecasting, real-time deviation scoring, entity relationship graph (co-appearance within 5-min windows), multi-camera movement chain reconstruction, threat scoring with multiple factors.
 - **`traffic_cam.py`** — Neighborhood overwatch: stitches OpenStreetMap tiles into a live tactical map view of San Rafael Ave & Palm Canyon Dr. Tactical dark overlay, crosshair, GPS labels. 10-min refresh. Supports live MJPEG override via NEIGHBORHOOD_CAM_URL.
 
+### Backend — Universal Camera Framework (NEW)
+- **`camera_adapters.py`** — Multi-manufacturer adapter registry. 14 vendors: tapo, rtsp, mjpeg, http_snap, hikvision, amcrest/dahua, reolink, wyze, onvif, usb, bluetooth, ring/arlo/nest stubs. Subclass `CameraAdapter` + call `register_adapter()` to add new vendors. Each adapter implements `snapshot()`, `stream_url()`, `capabilities()`. The `adapter_poll_loop` in camera_watcher.py drives any registered adapter through the full AI pipeline.
+- **`camera_discover.py`** — Network camera auto-discovery. Layers: ONVIF WS-Discovery (UDP multicast 239.255.255.250:3702), parallel TCP port scan of common ports (80/554/8554/8800/8000/37777), vendor fingerprinting via characteristic URL probes. Returns CameraInfo objects + ready-to-paste YAML block. Routes: `/api/discover`, `/api/discover/yaml`, `/api/adapters`.
+
+### Backend — Palantir Forward Intelligence (NEW)
+- **`entity_resolution.py`** — Cross-modal identity fusion. Combines face (40%), gait (30%), appearance (15%), spatial-temporal (10%), and existing profile aliases (5%) into a single weighted score. Above 85% reinforces existing entity, 70-85% logs a merge suggestion, below 70% spawns new entity. Tracks merge_log for human review. Manual `merge_entities()` and `unmerge_entity()` operations. SQLite store at `/tmp/palm_entities.db`. Routes: `/intel/entities`, `/intel/entity/<id>`, `/intel/merge_log`.
+- **`forward_intel.py`** — Predictive threat scenarios + behavior classification. Classifies entities as: visitor, regular, scout, loiterer, runner, lookout, intruder, occasional. Scenario builders: scouting (hit 3+ cameras in 15min), convergence (3+ entities at one camera in 5min window), anomalous absence (regulars overdue by 1.6×), loitering, intruder. Routes: `/intel/forecast`, `/intel/behavior`, `/intel/classify/<id>`.
+
 ### Proxy Server
 - **`serve_dashboard.py`** — Serves `dashboard/` static files on port 5000, proxies `/api/*` → 8181, `/go2rtc/*` → 1984.
 
 ### Configuration
-- **`cameras.yaml`** — Camera configuration
-- Key env vars: `TAPO_IP`, `TAPO_PASSWORD`, `DB_PATH`, `HOME_LAT`, `HOME_LON`, `HOME_ZIP`, `HOME_NAME`, `NEIGHBORHOOD_CAM_URL`, `FBI_FIELD_OFFICES`, `GAIT_MODEL`, `FACE_MATCH_THRESH`
+- **`cameras.yaml`** — Camera configuration. `type:` field maps to a registered adapter (see camera_adapters.py); built-ins: tapo, rtsp, go2rtc; universal: hikvision, reolink, amcrest, dahua, onvif, mjpeg, http_snap, wyze, usb, bluetooth, ring, arlo, nest.
+- Key env vars: `TAPO_IP`, `TAPO_PASSWORD`, `DB_PATH`, `ENTITY_RESOLUTION_DB`, `HOME_LAT`, `HOME_LON`, `HOME_ZIP`, `HOME_NAME`, `NEIGHBORHOOD_CAM_URL`, `FBI_FIELD_OFFICES`, `GAIT_MODEL`, `FACE_MATCH_THRESH`, `BT_ENABLE`
+
+### Extending for Claude Code
+- **Add a camera vendor**: subclass `CameraAdapter` in camera_adapters.py, implement `snapshot()` + `stream_url()` + `capabilities()`, call `register_adapter("vendor_name", YourClass)`. Use HikvisionAdapter or ReolinkAdapter as templates. The `adapter_poll_loop` picks it up automatically.
+- **Add a discovery layer**: implement `discover_<name>()` in camera_discover.py and call from `discover_all()`. Add fingerprint patterns to VENDOR_PROBES.
+- **Add a fusion modality** (entity resolution): implement `_score_<modality>()` and add weight to FUSION_WEIGHTS in entity_resolution.py.
+- **Add a forward-intel scenario**: implement `_scenario_<name>()` returning a list of scenario dicts and append to the tuple in `build_scenarios()`.
+- **Add a query intent**: append to `_INTENT_PATTERNS` (Palantir patterns FIRST, generic LAST) in query_agent.py and add the corresponding `_handle_<intent>()` function. Register in the `handlers` dict in `query()`.
 
 ## Workflows
 - **Start application** — `python3.12 serve_dashboard.py` on port 5000
