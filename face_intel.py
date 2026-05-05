@@ -318,6 +318,7 @@ class FaceIntelEngine:
         self._lock       = threading.Lock()
         self._last_fbi_refresh = 0.0
         self._match_log: list[dict] = []
+        self._load_poi_db()
         print("[face_intel] FaceIntelEngine initialized", flush=True)
 
     # ── FBI database management ──────────────────────────────────
@@ -406,8 +407,46 @@ class FaceIntelEngine:
             poi = POIPerson(self._next_poi_id, label, notes, photo_path, threat_level)
             self._poi.append(poi)
             self._next_poi_id += 1
+            self._save_poi_db()
         print(f"[face_intel] POI added: {label} (id={poi.id})", flush=True)
         return {"id": poi.id, "label": label, "threat_level": threat_level}
+
+    def _poi_db_path(self) -> Path:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        return CACHE_DIR / "poi_db.json"
+
+    def _load_poi_db(self) -> None:
+        path = self._poi_db_path()
+        if not path.exists():
+            return
+        try:
+            rows = json.loads(path.read_text())
+            for row in rows:
+                poi = POIPerson(
+                    int(row.get("id", self._next_poi_id)),
+                    str(row.get("label", "POI")),
+                    str(row.get("notes", "")),
+                    row.get("photo_path"),
+                    str(row.get("threat_level", "WATCH")),
+                )
+                self._poi.append(poi)
+                self._next_poi_id = max(self._next_poi_id, poi.id + 1)
+            print(f"[face_intel] Local POI database loaded: {len(self._poi)} persons", flush=True)
+        except Exception as e:
+            print(f"[face_intel] POI load error: {e}", flush=True)
+
+    def _save_poi_db(self) -> None:
+        rows = [
+            {
+                "id": p.id,
+                "label": p.label,
+                "notes": p.notes,
+                "photo_path": p.photo_path,
+                "threat_level": p.threat_level,
+            }
+            for p in self._poi
+        ]
+        self._poi_db_path().write_text(json.dumps(rows, indent=2))
 
     # ── Face comparison ──────────────────────────────────────────
 

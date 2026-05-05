@@ -690,8 +690,9 @@ function updateThreatLevel(st) {
 async function refreshIntel() {
   // Profiles
   const profiles = await api('/profiles');
-  if (profiles && profiles.profiles) {
-    S.profiles = profiles.profiles;
+  const profileList = Array.isArray(profiles) ? profiles : (profiles && profiles.profiles);
+  if (profileList) {
+    S.profiles = profileList;
     document.getElementById('si-profiles').textContent = S.profiles.length;
     renderEntityCards(S.profiles);
   }

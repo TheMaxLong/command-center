@@ -1150,15 +1150,16 @@ class Handler(BaseHTTPRequestHandler):
             self._json(forward_intel.classify_entity(eid))
 
         # ─── SD card backfill ───────────────────────────────────────────
-        elif parsed.path.startswith("/api/backfill/status/"):
-            job_id = parsed.path.split("/api/backfill/status/", 1)[1].rstrip("/")
+        elif parsed.path.startswith("/api/backfill/status/") or parsed.path.startswith("/backfill/status/"):
+            prefix = "/api/backfill/status/" if parsed.path.startswith("/api/backfill/status/") else "/backfill/status/"
+            job_id = parsed.path.split(prefix, 1)[1].rstrip("/")
             status = backfill_tapo.get_job_status(job_id)
             if status is None:
                 self._not_found(); return
             safe = {k: v for k, v in status.items() if k != "log"}
             self._json(safe)
 
-        elif p == "/api/backfill/jobs":
+        elif p in ("/api/backfill/jobs", "/backfill/jobs"):
             self._json({"jobs": [
                 {k: v for k, v in j.items() if k != "log"}
                 for j in backfill_tapo.list_jobs()
@@ -1274,6 +1275,84 @@ class Handler(BaseHTTPRequestHandler):
             self._unauthorized(); return
         parsed = urlparse(self.path)
         p      = parsed.path.rstrip("/")
+        parts  = parsed.path.strip("/").split("/")
+
+        # POST /profile/<id>/(trust|ignore|delete|merge|enroll-face)
+        if parts[0] == "profile" and len(parts) == 3 and parts[2] in (
+            "trust", "ignore", "delete", "merge", "enroll-face"
+        ):
+            try:
+                pid = int(parts[1])
+            except ValueError:
+                self._not_found(); return
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+
+            if parts[2] == "trust":
+                name = str(data.get("label") or profiler.get_profile_label(pid)).strip()[:36]
+                if not name:
+                    name = f"PROFILE-{pid:03d}"
+                label = name if name.startswith("TRUSTED") else f"TRUSTED-{name}"
+                ok = profiler.set_profile_label(pid, label)
+                self._json({"ok": ok, "profile_id": pid, "label": label}); return
+
+            if parts[2] == "ignore":
+                reason = str(data.get("reason") or data.get("label") or "BACKGROUND").strip()[:36]
+                label = reason if reason.startswith(("IGNORE", "BACKGROUND")) else f"IGNORE-{reason}"
+                ok = profiler.set_profile_label(pid, label)
+                self._json({"ok": ok, "profile_id": pid, "label": label}); return
+
+            if parts[2] == "delete":
+                ok = event_db.delete_profile(pid)
+                self._json({"ok": ok, "profile_id": pid}); return
+
+            if parts[2] == "merge":
+                try:
+                    keep_id = int(data.get("into"))
+                except Exception:
+                    self._json({"ok": False, "error": "missing merge target"}); return
+                if keep_id == pid:
+                    self._json({"ok": False, "error": "cannot merge profile into itself"}); return
+                keep = event_db.get_profile(keep_id)
+                drop = event_db.get_profile(pid)
+                if not keep or not drop:
+                    self._json({"ok": False, "error": "profile not found"}); return
+                try:
+                    keep_emb = json.loads(keep["embedding"])
+                    drop_emb = json.loads(drop["embedding"])
+                    keep_n = max(int(keep.get("sightings") or 1), 1)
+                    drop_n = max(int(drop.get("sightings") or 1), 1)
+                    if len(keep_emb) == len(drop_emb):
+                        merged_emb = [
+                            ((a * keep_n) + (b * drop_n)) / (keep_n + drop_n)
+                            for a, b in zip(keep_emb, drop_emb)
+                        ]
+                    else:
+                        merged_emb = keep_emb
+                except Exception:
+                    merged_emb = json.loads(keep["embedding"])
+                cams = sorted(set(json.loads(keep["cameras"]) + json.loads(drop["cameras"])))
+                event_db.merge_profiles(keep_id, pid, cams, merged_emb)
+                self._json({"ok": True, "kept": keep_id, "merged": pid}); return
+
+            if parts[2] == "enroll-face":
+                thumb = event_db.get_profile_thumb(pid)
+                if not thumb:
+                    self._json({"ok": False, "error": "profile has no thumbnail"}); return
+                label = str(data.get("label") or profiler.get_profile_label(pid)).strip()[:48] or f"PROFILE-{pid:03d}"
+                notes = str(data.get("notes") or f"Enrolled from profile {pid}").strip()[:200]
+                out_dir = Path(os.environ.get("FACE_CACHE_DIR", "/tmp/face_intel")) / "poi"
+                out_dir.mkdir(parents=True, exist_ok=True)
+                photo_path = out_dir / f"profile_{pid}.jpg"
+                photo_path.write_bytes(thumb)
+                poi = face_intel.get_engine().add_poi(
+                    label=label, photo_path=str(photo_path), notes=notes, threat_level="TRUSTED"
+                )
+                self._json({"ok": True, "profile_id": pid, "poi": poi}); return
 
         # POST /scan/plate  — Field Scan LPR
         if p == "/scan/plate":
@@ -1372,25 +1451,42 @@ class Handler(BaseHTTPRequestHandler):
             result = _purge_old_media(days=days, dry_run=dry_run)
             self._json(result)
 
-        # POST /api/backfill/<cam_id>  {"days": 7}
-        elif parsed.path.startswith("/api/backfill/") and not parsed.path.startswith("/api/backfill/status"):
-            cam_id = parsed.path.split("/api/backfill/", 1)[1].rstrip("/")
-            if cam_id not in cameras:
-                self._json({"error": f"unknown camera: {cam_id}"}); return
+        # POST /api/backfill/<cam_id|all>  {"hours": 24}
+        elif ((parsed.path.startswith("/api/backfill/") and not parsed.path.startswith("/api/backfill/status"))
+              or (parsed.path.startswith("/backfill/") and not parsed.path.startswith("/backfill/status"))):
+            prefix = "/api/backfill/" if parsed.path.startswith("/api/backfill/") else "/backfill/"
+            cam_id = parsed.path.split(prefix, 1)[1].rstrip("/")
             # Look up the camera config
             cfg_list = load_config()
-            cam_cfg  = next((c for c in cfg_list if c["id"] == cam_id), None)
-            if not cam_cfg or cam_cfg.get("type") != "tapo":
-                self._json({"error": f"{cam_id} is not a Tapo camera"}); return
             length = int(self.headers.get("Content-Length", 0))
             body   = self.rfile.read(length)
             try:
                 data = json.loads(body) if body else {}
-                days = int(data.get("days", 7))
+                hours = float(data.get("hours", 24))
+                days = float(data.get("days", hours / 24))
             except Exception:
-                days = 7
-            job_id = backfill_tapo.start_backfill_job(cam_cfg, days=days)
-            self._json({"ok": True, "job_id": job_id, "cam": cam_id, "days": days})
+                hours = 24.0
+                days = 1.0
+            hours = max(1.0, min(hours, 24 * 90))
+
+            if cam_id in ("all", "*"):
+                tapo_cfgs = [c for c in cfg_list if c.get("type") == "tapo" and c.get("id") in cameras]
+                if not tapo_cfgs:
+                    self._json({"error": "no Tapo cameras configured for SD backfill", "jobs": []}); return
+                jobs = [
+                    {"cam": cfg["id"], "job_id": backfill_tapo.start_backfill_job(cfg, days=days, hours=hours)}
+                    for cfg in tapo_cfgs
+                ]
+                self._json({"ok": True, "jobs": jobs, "hours": hours, "eligible_cameras": [j["cam"] for j in jobs]})
+                return
+
+            if cam_id not in cameras:
+                self._json({"error": f"unknown camera: {cam_id}"}); return
+            cam_cfg  = next((c for c in cfg_list if c["id"] == cam_id), None)
+            if not cam_cfg or cam_cfg.get("type") != "tapo":
+                self._json({"error": f"{cam_id} is not a Tapo camera"}); return
+            job_id = backfill_tapo.start_backfill_job(cam_cfg, days=days, hours=hours)
+            self._json({"ok": True, "job_id": job_id, "cam": cam_id, "hours": hours})
 
         # POST /events/delete  {"ids": [1,2,3]}  or {"all": true}
         elif p == "/events/delete":
