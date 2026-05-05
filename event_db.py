@@ -364,6 +364,13 @@ def set_profile_label(profile_id: int, label: str) -> bool:
         return c.execute("SELECT changes()").fetchone()[0] > 0
 
 
+def delete_profile(profile_id: int) -> bool:
+    """Delete a learned profile and its sighting links. Events/media stay intact."""
+    with _conn() as c:
+        c.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
+        return c.execute("SELECT changes()").fetchone()[0] > 0
+
+
 def merge_profiles(
     keep_id: int,
     drop_id: int,

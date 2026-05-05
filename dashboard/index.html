@@ -233,6 +233,20 @@
       overflow: hidden;
       background: #000;
     }
+    .tile-body::before {
+      content: '';
+      position: absolute;
+      inset: 9px;
+      border: 1px solid rgba(0,184,217,0.14);
+      background:
+        linear-gradient(90deg, rgba(0,212,106,0.32) 0 16px, transparent 16px calc(100% - 16px), rgba(0,212,106,0.32) calc(100% - 16px)) top left / 100% 1px no-repeat,
+        linear-gradient(90deg, rgba(0,212,106,0.32) 0 16px, transparent 16px calc(100% - 16px), rgba(0,212,106,0.32) calc(100% - 16px)) bottom left / 100% 1px no-repeat,
+        linear-gradient(180deg, rgba(0,212,106,0.32) 0 16px, transparent 16px calc(100% - 16px), rgba(0,212,106,0.32) calc(100% - 16px)) top left / 1px 100% no-repeat,
+        linear-gradient(180deg, rgba(0,212,106,0.32) 0 16px, transparent 16px calc(100% - 16px), rgba(0,212,106,0.32) calc(100% - 16px)) top right / 1px 100% no-repeat;
+      z-index: 6;
+      pointer-events: none;
+      opacity: 0.72;
+    }
     .tile-body iframe { width: 100%; height: 100%; border: none; display: block; }
     .tile-body::after {
       content: '';
@@ -289,6 +303,7 @@
       transition: all 0.1s;
     }
     .ch-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+    .ch-btn.danger:hover { border-color: var(--red); color: var(--red); }
 
     .rot-bar {
       position: absolute;
@@ -313,6 +328,57 @@
       border-radius: 2px;
       z-index: 6;
       pointer-events: none;
+    }
+    .op-overlay {
+      position: absolute;
+      left: 8px;
+      top: 6px;
+      z-index: 8;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      pointer-events: none;
+    }
+    .op-chip {
+      font-size: 7px;
+      letter-spacing: 1px;
+      color: rgba(192,204,216,0.86);
+      background: rgba(0,0,0,0.58);
+      border: 1px solid rgba(26,51,82,0.92);
+      border-radius: 2px;
+      padding: 2px 6px;
+      text-shadow: 0 0 8px rgba(0,0,0,0.8);
+    }
+    .op-chip.live { color: var(--green); border-color: rgba(0,212,106,0.32); }
+    .op-chip.warn { color: var(--yellow); border-color: rgba(245,196,0,0.28); }
+    .op-scan {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: 1px;
+      z-index: 6;
+      background: linear-gradient(90deg, transparent, rgba(0,212,106,0.22), transparent);
+      pointer-events: none;
+      opacity: 0.5;
+    }
+    .op-empty-feed {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      background: radial-gradient(circle at center, rgba(0,184,217,0.08), rgba(7,11,15,0.96) 62%);
+      color: var(--dim);
+      letter-spacing: 1.5px;
+      font-size: 9px;
+      text-align: center;
+      padding: 18px;
     }
 
     /* ── FOOTER ── */
@@ -670,6 +736,121 @@
       letter-spacing: 1px;
     }
     .profile-rename button:hover { border-color: var(--green); color: var(--green); }
+    .profile-console-head {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .profile-action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 8px;
+    }
+    .profile-action {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7px;
+      letter-spacing: 1px;
+      padding: 4px 7px;
+      border-radius: 2px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.18);
+      color: var(--dim);
+      cursor: pointer;
+    }
+    .profile-action:hover { color: var(--cyan); border-color: var(--cyan); }
+    .profile-action.good { color: var(--green); border-color: rgba(0,212,106,0.28); }
+    .profile-action.warn { color: var(--yellow); border-color: rgba(245,196,0,0.28); }
+    .profile-action.danger { color: var(--red); border-color: rgba(255,59,59,0.32); }
+    .profile-select {
+      min-width: 112px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7px;
+      letter-spacing: 1px;
+      background: rgba(0,0,0,0.35);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 2px;
+      padding: 4px 6px;
+    }
+    .identity-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 7px;
+      letter-spacing: 1.2px;
+      padding: 2px 6px;
+      border-radius: 2px;
+      border: 1px solid var(--border2);
+      color: var(--dim);
+      background: rgba(0,0,0,0.18);
+    }
+    .identity-badge.trusted { color: var(--green); border-color: rgba(0,212,106,0.35); background: rgba(0,212,106,0.08); }
+    .identity-badge.ignore { color: var(--yellow); border-color: rgba(245,196,0,0.3); background: rgba(245,196,0,0.06); }
+    .identity-badge.face { color: var(--cyan); border-color: rgba(0,184,217,0.35); background: rgba(0,184,217,0.07); }
+
+    .media-drawer {
+      position: fixed;
+      right: 18px;
+      top: calc(var(--header-h) + 74px);
+      width: min(460px, calc(100vw - 36px));
+      max-height: calc(100vh - var(--header-h) - var(--footer-h) - 96px);
+      z-index: 110;
+      background: rgba(3, 7, 10, 0.98);
+      border: 1px solid rgba(0,184,217,0.36);
+      box-shadow: 0 0 32px rgba(0,0,0,0.72), inset 0 0 24px rgba(0,184,217,0.04);
+      border-radius: 3px;
+      display: none;
+      overflow: hidden;
+    }
+    .media-drawer.open { display: block; }
+    .media-drawer-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border2);
+      color: var(--cyan);
+      font-size: 8px;
+      letter-spacing: 2px;
+    }
+    .media-drawer-close {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1px;
+      color: var(--dim);
+      border: 1px solid var(--border);
+      background: transparent;
+      border-radius: 2px;
+      padding: 3px 7px;
+      cursor: pointer;
+    }
+    .media-drawer-body { padding: 12px; overflow: auto; max-height: calc(100vh - 210px); }
+    .media-preview {
+      width: 100%;
+      background: #000;
+      border: 1px solid var(--border2);
+      border-radius: 2px;
+      aspect-ratio: 16 / 9;
+      object-fit: contain;
+    }
+    .media-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .storage-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 8px;
+    }
 
     /* ── CROSS-CAMERA TIMELINE ── */
     .timeline-row {
@@ -836,6 +1017,145 @@
       color: var(--dim);
       letter-spacing: 1.5px;
     }
+    .ops-grid {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 14px;
+      align-items: start;
+    }
+    .ops-section {
+      border: 1px solid var(--border2);
+      background: rgba(255,255,255,0.018);
+      border-radius: 3px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .ops-title {
+      font-size: 8px;
+      color: var(--cyan);
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+    }
+    .ops-kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .ops-kpi {
+      background: rgba(0,0,0,0.26);
+      border: 1px solid var(--border2);
+      border-radius: 3px;
+      padding: 9px;
+      min-height: 52px;
+    }
+    .ops-kpi-val {
+      font-size: 18px;
+      color: var(--text);
+      letter-spacing: 1px;
+      line-height: 1.2;
+    }
+    .ops-kpi-label {
+      font-size: 7px;
+      color: var(--dim);
+      letter-spacing: 1.3px;
+      margin-top: 3px;
+    }
+    .ops-event {
+      display: grid;
+      grid-template-columns: 86px 78px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 8px;
+    }
+    .ops-event:last-child { border-bottom: none; }
+    .ops-time { color: var(--cyan); letter-spacing: 1px; }
+    .ops-cam { color: var(--green); letter-spacing: 1px; }
+    .ops-tags { color: var(--text); letter-spacing: 0.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ops-link {
+      color: var(--cyan);
+      text-decoration: none;
+      border: 1px solid rgba(0,184,217,0.24);
+      padding: 2px 6px;
+      border-radius: 2px;
+      letter-spacing: 1px;
+      background: transparent;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 7px;
+    }
+    .ops-link:hover { border-color: var(--cyan); color: var(--text); }
+    .ops-entity {
+      border: 1px solid var(--border2);
+      background: rgba(0,0,0,0.18);
+      border-radius: 3px;
+      padding: 8px;
+      margin-bottom: 8px;
+    }
+    .ops-entity-main {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 9px;
+      letter-spacing: 1px;
+    }
+    .ops-entity-main span:first-child { color: var(--green); }
+    .ops-entity-sub {
+      margin-top: 5px;
+      font-size: 7px;
+      color: var(--dim);
+      letter-spacing: 1px;
+      line-height: 1.5;
+    }
+    .ops-form {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .ops-form input, .ops-form select {
+      width: 100%;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      background: rgba(0,0,0,0.32);
+      border: 1px solid var(--border2);
+      color: var(--text);
+      padding: 7px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.5px;
+    }
+    .ops-form input:focus, .ops-form select:focus { outline: none; border-color: var(--cyan); }
+    .ops-form .wide { grid-column: 1 / -1; }
+    .ops-btn {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1px;
+      padding: 7px 10px;
+      background: rgba(0,212,106,0.06);
+      border: 1px solid rgba(0,212,106,0.3);
+      color: var(--green);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    .ops-btn:hover { border-color: var(--green); background: rgba(0,212,106,0.1); }
+    .ops-btn.secondary { color: var(--dim); border-color: var(--border2); background: transparent; }
+    .ops-btn.secondary:hover { color: var(--cyan); border-color: var(--cyan); }
+    .ops-log-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border2);
+      font-size: 8px;
+      color: var(--dim);
+      letter-spacing: 0.7px;
+    }
+    .ops-log-line span:first-child { color: var(--text); }
 
     /* PALANTIR sidebar button glow when open */
     .city-btn.palantir-active {
@@ -938,11 +1258,15 @@
       INTEL BRIEFING
       <span class="cb-sub" id="sb-briefing-sub">24H SUMMARY</span>
     </button>
+    <button class="city-btn ai-btn" onclick="openAIPanel('ops')">
+      OPERATIONS
+      <span class="cb-sub" id="sb-ops-sub">TIMELINE · GRAPH · SOURCES</span>
+    </button>
     <button class="city-btn ai-btn" onclick="openAIPanel('trends')">
       5-WEEK TRENDS
       <span class="cb-sub">HEATMAP · SCHEDULES</span>
     </button>
-    <button class="city-btn ai-btn" onclick="window.open('/monitor','_blank')">
+    <button class="city-btn ai-btn" onclick="openMonitor('doorbell','ann')">
       MONITOR MODE
       <span class="cb-sub">DEDICATED CAMERA VIEW</span>
     </button>
@@ -956,14 +1280,14 @@
     </button>
 
     <button class="feeds-toggle" id="feeds-toggle-btn" onclick="toggleFeeds()">
-      <span>PUBLIC FEEDS &nbsp;<span id="feeds-active-label" style="color:var(--cyan);font-size:7px">PALM SPRINGS</span></span>
+      <span>PUBLIC FEEDS &nbsp;<span id="feeds-active-label" style="color:var(--cyan);font-size:7px">DESERT ROADS</span></span>
       <span class="ft-arrow">▶</span>
     </button>
     <div id="feeds-drawer">
       <div class="sb-section-label">CALIFORNIA</div>
       <button class="city-btn active" id="btn-ps" onclick="switchCity('ps')">
-        PALM SPRINGS
-        <span class="cb-sub">COACHELLA VALLEY</span>
+        DESERT ROADS
+        <span class="cb-sub">CALTRANS I-10</span>
       </button>
       <div class="sb-section-label">LOS ANGELES</div>
       <button class="city-btn" id="btn-la-fwy" onclick="switchCity('la-fwy')">
@@ -993,6 +1317,15 @@
         NEW YORK
         <span class="cb-sub">TIMES SQ · BRYANT PK · PANDAS</span>
       </button>
+      <div class="sb-section-label">CUSTOM</div>
+      <button class="city-btn" id="btn-custom" onclick="switchCity('custom')">
+        OPERATOR SOURCES
+        <span class="cb-sub" id="custom-source-count">0 MANUAL</span>
+      </button>
+      <button class="city-btn" onclick="openSourceManager()">
+        MANAGE SOURCES
+        <span class="cb-sub">HIDE · ADD EMBED</span>
+      </button>
     </div>
 
     <div class="sb-spacer"></div>
@@ -1011,7 +1344,7 @@
         <div class="tile-label">FRONT CAM</div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div class="tile-meta" id="front-meta">TAPO · RTSP · go2rtc</div>
-          <a class="monitor-btn" href="/monitor?cam=front_cam" target="_blank" onclick="event.stopPropagation()" title="Open in monitor mode">⊞ MONITOR</a>
+          <a class="monitor-btn" href="/monitor?cam=front_cam&mode=ann" onclick="event.stopPropagation(); openMonitor('front_cam','ann'); return false;" title="Open in monitor mode">⊞ MONITOR</a>
         </div>
       </div>
       <div class="tile-body" style="position:relative;">
@@ -1028,7 +1361,7 @@
         <div class="tile-label">DOORBELL · D210</div>
         <div style="display:flex;gap:6px;align-items:center;">
           <div class="tile-meta" id="bell-meta">STANDBY</div>
-          <a class="monitor-btn" href="/monitor?cam=doorbell" target="_blank" onclick="event.stopPropagation()" title="Open in monitor mode">⊞ MONITOR</a>
+          <a class="monitor-btn" href="/monitor?cam=doorbell&mode=ann" onclick="event.stopPropagation(); openMonitor('doorbell','ann'); return false;" title="Open in monitor mode">⊞ MONITOR</a>
         </div>
       </div>
       <div class="tile-body" style="background:#000;position:relative;">
@@ -1057,12 +1390,15 @@
         <div class="ch-controls">
           <span class="tile-meta" id="pub-meta-0" style="margin-right:4px"></span>
           <button class="ch-btn" onclick="advanceTile(0)">NEXT ▶</button>
+          <button class="ch-btn danger" onclick="hidePublicCam(0)" title="Hide this source">×</button>
         </div>
       </div>
       <div class="tile-body">
         <video class="cam-snap" id="pub-vid-0" autoplay muted playsinline style="display:none"></video>
         <img   class="cam-snap" id="pub-img-0" style="display:none" alt="">
         <iframe class="cam-snap" id="pub-frame-0" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="op-overlay" id="pub-op-0"></div>
+        <div class="op-scan"></div>
         <div class="cam-label-overlay" id="pub-loc-0"></div>
         <div class="tile-badge" id="pub-badge-0">HLS</div>
         <div class="rot-bar" id="rot-bar-0"></div>
@@ -1075,12 +1411,15 @@
         <div class="ch-controls">
           <span class="tile-meta" id="pub-meta-1" style="margin-right:4px"></span>
           <button class="ch-btn" onclick="advanceTile(1)">NEXT ▶</button>
+          <button class="ch-btn danger" onclick="hidePublicCam(1)" title="Hide this source">×</button>
         </div>
       </div>
       <div class="tile-body">
         <video class="cam-snap" id="pub-vid-1" autoplay muted playsinline style="display:none"></video>
         <img   class="cam-snap" id="pub-img-1" style="display:none" alt="">
         <iframe class="cam-snap" id="pub-frame-1" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="op-overlay" id="pub-op-1"></div>
+        <div class="op-scan"></div>
         <div class="cam-label-overlay" id="pub-loc-1"></div>
         <div class="tile-badge" id="pub-badge-1">HLS</div>
         <div class="rot-bar" id="rot-bar-1"></div>
@@ -1093,12 +1432,15 @@
         <div class="ch-controls">
           <span class="tile-meta" id="pub-meta-2" style="margin-right:4px"></span>
           <button class="ch-btn" onclick="advanceTile(2)">NEXT ▶</button>
+          <button class="ch-btn danger" onclick="hidePublicCam(2)" title="Hide this source">×</button>
         </div>
       </div>
       <div class="tile-body">
         <video class="cam-snap" id="pub-vid-2" autoplay muted playsinline style="display:none"></video>
         <img   class="cam-snap" id="pub-img-2" style="display:none" alt="">
         <iframe class="cam-snap" id="pub-frame-2" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="op-overlay" id="pub-op-2"></div>
+        <div class="op-scan"></div>
         <div class="cam-label-overlay" id="pub-loc-2"></div>
         <div class="tile-badge" id="pub-badge-2">HLS</div>
         <div class="rot-bar" id="rot-bar-2"></div>
@@ -1111,12 +1453,15 @@
         <div class="ch-controls">
           <span class="tile-meta" id="pub-meta-3" style="margin-right:4px"></span>
           <button class="ch-btn" onclick="advanceTile(3)">NEXT ▶</button>
+          <button class="ch-btn danger" onclick="hidePublicCam(3)" title="Hide this source">×</button>
         </div>
       </div>
       <div class="tile-body">
         <video class="cam-snap" id="pub-vid-3" autoplay muted playsinline style="display:none"></video>
         <img   class="cam-snap" id="pub-img-3" style="display:none" alt="">
         <iframe class="cam-snap" id="pub-frame-3" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="op-overlay" id="pub-op-3"></div>
+        <div class="op-scan"></div>
         <div class="cam-label-overlay" id="pub-loc-3"></div>
         <div class="tile-badge" id="pub-badge-3">HLS</div>
         <div class="rot-bar" id="rot-bar-3"></div>
@@ -1175,7 +1520,7 @@
       <div class="fsm-meta" id="fsm-meta"></div>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
-      <button onclick="window.open('/monitor?cam='+fsmActiveCam,'_blank')" style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--border);border-radius:2px;background:transparent;color:var(--dim);cursor:pointer">⊞ MONITOR</button>
+      <button onclick="openMonitor(fsmActiveCam, 'ann')" style="font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;padding:3px 8px;border:1px solid var(--border);border-radius:2px;background:transparent;color:var(--dim);cursor:pointer">⊞ MONITOR</button>
       <button id="fsm-close" onclick="exitFullscreen()">✕ EXIT  [ESC]</button>
     </div>
   </div>
@@ -1196,11 +1541,20 @@
     <button class="ai-tab active" id="tab-events"   onclick="switchAITab('events')">EVENT LOG</button>
     <button class="ai-tab"        id="tab-profiles" onclick="switchAITab('profiles')">PERSONS</button>
     <button class="ai-tab"        id="tab-trends"   onclick="switchAITab('trends')">5-WEEK TRENDS</button>
+    <button class="ai-tab"        id="tab-ops"      onclick="switchAITab('ops')">OPERATIONS</button>
     <button class="ai-tab"        id="tab-briefing" onclick="switchAITab('briefing')">BRIEFING</button>
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
   </div>
   <div id="ai-body"></div>
+</div>
+
+<div id="media-drawer" class="media-drawer">
+  <div class="media-drawer-head">
+    <span id="media-drawer-title">EVIDENCE PREVIEW</span>
+    <button class="media-drawer-close" onclick="closeMediaPreview()">✕ CLOSE</button>
+  </div>
+  <div id="media-drawer-body" class="media-drawer-body"></div>
 </div>
 
 <!-- ── FOOTER ── -->
@@ -1210,7 +1564,7 @@
     <span style="color:var(--border)">|</span>
     <span>go2rtc · <a href="/go2rtc/" target="_blank" style="color:inherit;text-decoration:none">:1984</a></span>
     <span style="color:var(--border)">|</span>
-    <span id="footer-source">PUBLIC: CALTRANS I-10 · PALM SPRINGS / COACHELLA VALLEY</span>
+    <span id="footer-source">PUBLIC: CALTRANS I-10 · DESERT ROADS / COACHELLA VALLEY</span>
   </div>
   <div class="footer-right">
     <div class="f-stat">FRONT &nbsp;<span id="fs-front">--</span></div>
@@ -1223,18 +1577,20 @@
 </div>
 
 <script>
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[ch]));
+}
+
 // ── CITY CAM POOLS ───────────────────────────────────────────────
 const CITIES = {
   ps: {
-    name:   'PALM SPRINGS / COACHELLA VALLEY',
-    source: 'ANGELCAM + CALTRANS D8',
-    footer: 'PUBLIC: PALM SPRINGS / COACHELLA VALLEY · ANGELCAM + CALTRANS I-10',
+    name:   'DESERT ROADS / COACHELLA VALLEY',
+    source: 'CALTRANS D8',
+    footer: 'PUBLIC: CALTRANS I-10 · DESERT ROADS / COACHELLA VALLEY',
     type:   'hls',
     cams: [
-      // Live city cams (Angelcam)
-      { id: 'angelcam-iw',      label: 'INDIAN WELLS CC',          loc: 'Indian Wells · Vision Turf',    type: 'angelcam', embed: 'https://v.angelcam.com/iframe?v=49yj9nm1r2' },
-      { id: 'angelcam-surf', label: 'PS SURF CLUB',              loc: 'Palm Springs · Desert Shores',  type: 'angelcam', embed: 'https://v.angelcam.com/iframe?v=40ye084kl5' },
-      { id: 'angelcam-westin',  label: 'WESTIN RANCHO MIRAGE',     loc: 'Rancho Mirage · Westin Resort', type: 'angelcam', embed: 'https://v.angelcam.com/iframe?v=gel25gb7lm' },
       // Caltrans I-10 HLS
       { id: 'i10515indiancanyon',       label: 'I-10 · INDIAN CANYON',      loc: 'Palm Springs · MP 515',       stream: 'https://wzmedia.dot.ca.gov/D8/LB-8_10_515.stream/playlist.m3u8' },
       { id: 'i10516geneautrytrail',     label: 'I-10 · GENE AUTRY TRAIL',   loc: 'Desert Hot Springs · MP 516', stream: 'https://wzmedia.dot.ca.gov/D8/LB-8_10_516.stream/playlist.m3u8' },
@@ -1242,7 +1598,6 @@ const CITIES = {
       { id: 'i10374eastofbobhopedrive', label: 'I-10 · BOB HOPE DRIVE',     loc: 'Thousand Palms · MP 374',     stream: 'https://wzmedia.dot.ca.gov/D8/LB-8_10_374.stream/playlist.m3u8' },
       { id: 'i10524monroestreet',       label: 'I-10 · MONROE STREET',      loc: 'Indio · MP 524',              stream: 'https://wzmedia.dot.ca.gov/D8/LB-8_10_524.stream/playlist.m3u8' },
       { id: 'i10525golfcenterpkwy',     label: 'I-10 · GOLF CENTER PKWY',   loc: 'Indio · MP 525',              stream: 'https://wzmedia.dot.ca.gov/D8/LB-8_10_525.stream/playlist.m3u8' },
-      { id: 'ps-air-museum', label: 'PS AIR MUSEUM · LIVE', loc: 'Palm Springs · Air Museum', type: 'angelcam', embed: 'https://www.youtube.com/embed/H8JUrFf0-5c?autoplay=1&mute=1&rel=0' },
     ],
   },
   'la-fwy': {
@@ -1349,6 +1704,13 @@ const CITIES = {
     type:   'hls',
     cams:   [],
   },
+  custom: {
+    name:   'OPERATOR SOURCES',
+    source: 'LOCAL BROWSER STORAGE',
+    footer: 'CUSTOM: OPERATOR-ADDED EMBEDS / HLS / JPEG',
+    type:   'angelcam',
+    cams:   [],
+  },
 };
 
 // ── HLS INSTANCES ────────────────────────────────────────────────
@@ -1411,6 +1773,124 @@ let autoRotate   = true;
 let rotateCount  = 0;
 let rotTimers    = [null, null, null, null];
 let rotBarStart  = [0, 0, 0, 0];
+let hiddenPublicSources = loadJSON('palm.hiddenSources', []);
+let customPublicSources = loadJSON('palm.customSources', []);
+CITIES.custom.cams = customPublicSources;
+
+function loadJSON(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') || fallback; }
+  catch { return fallback; }
+}
+
+function saveJSON(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function visibleCams(cityKey = activeCity) {
+  return (CITIES[cityKey]?.cams || []).filter(cam => !hiddenPublicSources.includes(cam.id));
+}
+
+function syncSourceCounts() {
+  const custom = document.getElementById('custom-source-count');
+  if (custom) custom.textContent = `${customPublicSources.length} MANUAL`;
+  const count = document.getElementById('sb-camcount');
+  if (count) count.textContent = `${visibleCams().length} STREAMS`;
+}
+
+function sourceTypeLabel(cam, city) {
+  const t = cam?.type || city?.type || 'hls';
+  if (t === 'angelcam') return 'EMBED';
+  if (t === 'jpeg') return 'JPEG';
+  return 'HLS';
+}
+CAMS = visibleCams(activeCity);
+
+function recordAudit(action, detail = '') {
+  const log = loadJSON('palm.auditLog', []);
+  log.unshift({ ts: Date.now(), action, detail });
+  saveJSON('palm.auditLog', log.slice(0, 30));
+}
+
+function requireOperatorConfirm(word, message) {
+  const entered = prompt(`${message}\n\nType ${word} to continue.`);
+  return entered === word;
+}
+
+function hidePublicCam(slot) {
+  const cam = CAMS[tileIndices[slot]];
+  if (!cam) return;
+  if (!confirm(`Hide ${cam.label} from the public source rotation?`)) return;
+  if (!hiddenPublicSources.includes(cam.id)) hiddenPublicSources.push(cam.id);
+  saveJSON('palm.hiddenSources', hiddenPublicSources);
+  recordAudit('SOURCE HIDDEN', cam.label);
+  CAMS = visibleCams(activeCity);
+  for (let i = 0; i < tileCount; i++) {
+    tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
+    renderTile(i);
+  }
+  syncSourceCounts();
+}
+
+function openSourceManager() {
+  openAIPanel('ops');
+  setTimeout(() => {
+    const form = document.getElementById('source-label');
+    if (form) form.focus();
+  }, 100);
+}
+
+function openMonitor(camId = 'doorbell', mode = 'ann') {
+  const params = new URLSearchParams({ cam: camId, mode });
+  window.location.href = `/monitor?${params.toString()}`;
+}
+
+function addCustomSource() {
+  const label = document.getElementById('source-label')?.value.trim();
+  const loc = document.getElementById('source-loc')?.value.trim() || 'Operator source';
+  const url = document.getElementById('source-url')?.value.trim();
+  const type = document.getElementById('source-type')?.value || 'angelcam';
+  if (!label || !url) return;
+  const id = 'custom-' + Date.now().toString(36);
+  const cam = { id, label: label.toUpperCase(), loc, type };
+  if (type === 'hls') cam.stream = url;
+  else if (type === 'jpeg') cam.img = url;
+  else cam.embed = url;
+  customPublicSources.unshift(cam);
+  CITIES.custom.cams = customPublicSources;
+  saveJSON('palm.customSources', customPublicSources);
+  recordAudit('SOURCE ADDED', label);
+  syncSourceCounts();
+  switchCity('custom');
+  if (aiCurrentTab === 'ops') loadOperations();
+}
+
+function restoreHiddenSources() {
+  if (!hiddenPublicSources.length) return;
+  hiddenPublicSources = [];
+  saveJSON('palm.hiddenSources', hiddenPublicSources);
+  recordAudit('SOURCES RESTORED', 'All hidden public sources restored');
+  CAMS = visibleCams(activeCity);
+  for (let i = 0; i < tileCount; i++) {
+    tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
+    renderTile(i);
+  }
+  syncSourceCounts();
+  if (aiCurrentTab === 'ops') loadOperations();
+}
+
+function deleteCustomSource(id) {
+  customPublicSources = customPublicSources.filter(c => c.id !== id);
+  CITIES.custom.cams = customPublicSources;
+  saveJSON('palm.customSources', customPublicSources);
+  recordAudit('SOURCE REMOVED', id);
+  CAMS = visibleCams(activeCity);
+  for (let i = 0; i < tileCount; i++) {
+    tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
+    renderTile(i);
+  }
+  syncSourceCounts();
+  if (aiCurrentTab === 'ops') loadOperations();
+}
 
 // ── CITY SWITCHING ───────────────────────────────────────────────
 function toggleFeeds() {
@@ -1421,7 +1901,15 @@ function toggleFeeds() {
 }
 
 function switchCity(city) {
-  if (city === activeCity) return;
+  if (city === activeCity) {
+    CAMS = visibleCams(city);
+    for (let i = 0; i < tileCount; i++) {
+      tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
+      renderTile(i);
+    }
+    syncSourceCounts();
+    return;
+  }
   activeCity = city;
 
   // Update sidebar buttons
@@ -1433,7 +1921,7 @@ function switchCity(city) {
   const label = document.getElementById('feeds-active-label');
   if (label && btnEl) label.textContent = btnEl.childNodes[0].textContent.trim();
 
-  CAMS = CITIES[city].cams;
+  CAMS = visibleCams(city);
 
   // Update footer + sidebar info
   document.getElementById('footer-source').textContent = CITIES[city].footer;
@@ -1443,7 +1931,7 @@ function switchCity(city) {
 
   // Reset tile indices and re-render all 4
   for (let i = 0; i < tileCount; i++) {
-    tileIndices[i] = i % CAMS.length;
+    tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
     destroySlot(i);
     renderTile(i);
     if (autoRotate) {
@@ -1458,12 +1946,42 @@ function renderTile(slot) {
   const idx  = tileIndices[slot];
   const cam  = CAMS[idx];
   const city = CITIES[activeCity];
+  const label = document.getElementById(`pub-label-${slot}`);
+  const meta = document.getElementById(`pub-meta-${slot}`);
+  const loc = document.getElementById(`pub-loc-${slot}`);
+  const op = document.getElementById(`pub-op-${slot}`);
+  const badge = document.getElementById(`pub-badge-${slot}`);
 
-  document.getElementById(`pub-label-${slot}`).textContent = cam.label;
-  document.getElementById(`pub-meta-${slot}`).textContent  = `CH ${idx + 1}/${CAMS.length}`;
-  document.getElementById(`pub-loc-${slot}`).textContent   = cam.loc;
+  if (!cam) {
+    destroySlot(slot);
+    hideAll(slot);
+    label.textContent = 'NO SOURCE';
+    meta.textContent = 'CH --';
+    loc.textContent = 'Add a custom source from Operations';
+    if (op) op.innerHTML = '<span class="op-chip warn">NO FEED</span>';
+    badge.className = 'tile-badge badge-rot';
+    badge.textContent = 'EMPTY';
+    const body = document.getElementById(`pub-tile-${slot}`).querySelector('.tile-body');
+    if (!body.querySelector(`#empty-${slot}`)) {
+      const empty = document.createElement('div');
+      empty.className = 'op-empty-feed';
+      empty.id = `empty-${slot}`;
+      empty.innerHTML = '<div>NO PUBLIC SOURCE</div><button class="ops-btn secondary" onclick="openSourceManager()">ADD SOURCE</button>';
+      body.appendChild(empty);
+    }
+    resetRotBar(slot);
+    return;
+  }
+  const empty = document.getElementById(`empty-${slot}`);
+  if (empty) empty.remove();
 
-  const badge   = document.getElementById(`pub-badge-${slot}`);
+  label.textContent = cam.label;
+  meta.textContent  = `CH ${idx + 1}/${CAMS.length}`;
+  loc.textContent   = cam.loc;
+  if (op) {
+    op.innerHTML = `<span class="op-chip live">${sourceTypeLabel(cam, city)}</span><span class="op-chip">${activeCity.toUpperCase()}</span>`;
+  }
+
   const camType = cam.type || city.type;
   destroySlot(slot);
 
@@ -1500,6 +2018,7 @@ function resetRotBar(slot) {
 
 // ── ADVANCE TILE ─────────────────────────────────────────────────
 function advanceTile(slot) {
+  if (!CAMS.length) return;
   tileIndices[slot] = (tileIndices[slot] + 1) % CAMS.length;
   rotateCount++;
   document.getElementById('fs-rot-count').textContent = rotateCount;
@@ -1861,6 +2380,7 @@ function switchAITab(tab) {
   if (tab === 'events')        loadEventLog();
   else if (tab === 'profiles') loadProfiles();
   else if (tab === 'trends')   loadTrends();
+  else if (tab === 'ops')      loadOperations();
   else if (tab === 'briefing') loadBriefing();
   else if (tab === 'alerts')   loadAlerts();
   else if (tab === 'storage')  loadStorage();
@@ -1878,23 +2398,37 @@ async function loadProfiles() {
       return;
     }
     const regulars  = profiles.filter(p => p.is_regular).length;
+    const trusted   = profiles.filter(p => String(p.label || '').startsWith('TRUSTED')).length;
+    const ignored   = profiles.filter(p => String(p.label || '').startsWith('IGNORE') || String(p.label || '').startsWith('BACKGROUND')).length;
     const returning = profiles.filter(p => p.returning_today).length;
     const newToday  = profiles.filter(p => p.first_seen_today).length;
-    let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:12px;">
-      ${profiles.length} PROFILES &nbsp;·&nbsp; ${regulars} REGULAR &nbsp;·&nbsp;
-      ${returning} RETURNING TODAY &nbsp;·&nbsp; ${newToday} NEW TODAY
+    let html = `<div class="profile-console-head">
+      <div class="ops-kpi"><div class="ops-kpi-val">${profiles.length}</div><div class="ops-kpi-label">IDENTITIES</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--green)">${trusted}</div><div class="ops-kpi-label">TRUSTED</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--yellow)">${ignored}</div><div class="ops-kpi-label">IGNORED</div></div>
+      <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--cyan)">${returning}</div><div class="ops-kpi-label">RETURNING TODAY</div></div>
+    </div>
+    <div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:12px;">
+      IDENTITY CONSOLE · ${regulars} REGULAR · ${newToday} NEW TODAY
     </div>`;
     html += profiles.map(p => {
       const isReg     = p.is_regular;
-      const labelCls  = isReg ? 'regular' : 'unknown';
+      const labelRaw   = String(p.label || '');
+      const isTrusted  = labelRaw.startsWith('TRUSTED');
+      const isIgnored  = labelRaw.startsWith('IGNORE') || labelRaw.startsWith('BACKGROUND');
+      const labelCls  = (isReg || isTrusted) ? 'regular' : 'unknown';
       const firstDt   = new Date(p.first_seen * 1000);
       const lastDt    = new Date(p.last_seen  * 1000);
       const fmtDate   = d => d.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true});
       const thumbEl   = p.has_thumb
-        ? `<img class="profile-thumb" src="/api/thumb/${p.id}" alt="">` 
+        ? `<img class="profile-thumb" src="/api/thumb/${p.id}" alt="">`
         : `<div class="profile-thumb-placeholder">◉</div>`;
       const cams      = (p.cameras || []).map(c => c.toUpperCase()).join(' · ') || '—';
       const habits    = p.habits || {};
+      const mergeOptions = profiles
+        .filter(o => o.id !== p.id)
+        .map(o => `<option value="${o.id}">#${String(o.id).padStart(3,'0')} · ${esc(o.label)}</option>`)
+        .join('');
       let habitHtml   = '';
       if (habits.total_seen) {
         habitHtml += `<div class="profile-habit">`;
@@ -1909,10 +2443,13 @@ async function loadProfiles() {
       const badges = [];
       if (p.returning_today)  badges.push(`<span class="det-tag det-person" style="font-size:7px">↩ RETURNING</span>`);
       if (p.first_seen_today) badges.push(`<span class="det-tag" style="font-size:7px;background:rgba(245,196,0,0.1);color:var(--yellow);border:1px solid #3d3000">★ NEW TODAY</span>`);
+      if (isTrusted) badges.push(`<span class="identity-badge trusted">TRUSTED</span>`);
+      if (isIgnored) badges.push(`<span class="identity-badge ignore">IGNORE ZONE</span>`);
+      if (p.has_thumb) badges.push(`<span class="identity-badge face">THUMB READY</span>`);
       return `<div class="profile-card">
         ${thumbEl}
         <div class="profile-info">
-          <div class="profile-label ${labelCls}">${p.label}${isReg ? ' ●' : ' ○'}</div>
+          <div class="profile-label ${labelCls}">${esc(p.label)}${(isReg || isTrusted) ? ' ●' : ' ○'}</div>
           <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">${badges.join('')}</div>
           <div class="profile-stat">SEEN: <span>${p.sightings}×</span></div>
           <div class="profile-stat">FIRST: <span>${fmtDate(firstDt)}</span></div>
@@ -1923,6 +2460,17 @@ async function loadProfiles() {
             <input type="text" id="rename-${p.id}" placeholder="Custom name…" value="">
             <button onclick="renameProfile(${p.id})">SAVE</button>
             <button onclick="loadTimeline(${p.id})" style="border-color:var(--cyan);color:var(--cyan);">TIMELINE</button>
+          </div>
+          <div class="profile-action-row">
+            <button class="profile-action good" onclick="trustProfile(${p.id})">TRUST</button>
+            <button class="profile-action warn" onclick="ignoreProfile(${p.id})">IGNORE</button>
+            <button class="profile-action" onclick="enrollFace(${p.id})">ENROLL FACE</button>
+            <select class="profile-select" id="merge-${p.id}">
+              <option value="">MERGE INTO...</option>${mergeOptions}
+            </select>
+            <button class="profile-action" onclick="mergeProfile(${p.id})">MERGE</button>
+            <a class="profile-action" href="/api/evidence/profile/${p.id}?hours=72" target="_blank" style="text-decoration:none;">EXPORT</a>
+            <button class="profile-action danger" onclick="deleteProfile(${p.id})">DELETE</button>
           </div>
         </div>
       </div>`;
@@ -1949,6 +2497,69 @@ async function renameProfile(pid) {
   } catch (e) {
     console.warn('rename failed', e);
   }
+}
+
+async function postProfileAction(pid, action, body = {}) {
+  const res = await fetch(`/api/profile/${pid}/${action}`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'action failed');
+  return data;
+}
+
+async function trustProfile(pid) {
+  const fallback = `PROFILE-${String(pid).padStart(3,'0')}`;
+  const name = prompt('Trusted label for this profile?', fallback);
+  if (name === null) return;
+  try {
+    await postProfileAction(pid, 'trust', {label: name.trim() || fallback});
+    recordAudit('PROFILE TRUSTED', `profile ${pid}`);
+    loadProfiles();
+  } catch (e) { alert(`Could not trust profile: ${e.message}`); }
+}
+
+async function ignoreProfile(pid) {
+  const reason = prompt('Ignore label / zone note?', 'BACKGROUND');
+  if (reason === null) return;
+  try {
+    await postProfileAction(pid, 'ignore', {reason: reason.trim() || 'BACKGROUND'});
+    recordAudit('PROFILE IGNORED', `profile ${pid}`);
+    loadProfiles();
+  } catch (e) { alert(`Could not ignore profile: ${e.message}`); }
+}
+
+async function enrollFace(pid) {
+  const label = prompt('Enroll this thumbnail into local face database as:', `PROFILE-${String(pid).padStart(3,'0')}`);
+  if (label === null) return;
+  try {
+    await postProfileAction(pid, 'enroll-face', {label: label.trim()});
+    recordAudit('FACE ENROLLED', `profile ${pid}`);
+    loadProfiles();
+  } catch (e) { alert(`Could not enroll face: ${e.message}`); }
+}
+
+async function mergeProfile(pid) {
+  const select = document.getElementById(`merge-${pid}`);
+  const into = select ? parseInt(select.value) : 0;
+  if (!into) return;
+  if (!requireOperatorConfirm('MERGE', `Merge profile ${pid} into profile ${into}?`)) return;
+  try {
+    await postProfileAction(pid, 'merge', {into});
+    recordAudit('PROFILE MERGED', `${pid} into ${into}`);
+    loadProfiles();
+  } catch (e) { alert(`Could not merge profile: ${e.message}`); }
+}
+
+async function deleteProfile(pid) {
+  if (!requireOperatorConfirm('DELETE', `Delete learned profile ${pid}? Events and media remain stored.`)) return;
+  try {
+    await postProfileAction(pid, 'delete');
+    recordAudit('PROFILE DELETED', `profile ${pid}`);
+    loadProfiles();
+  } catch (e) { alert(`Could not delete profile: ${e.message}`); }
 }
 
 async function loadTimeline(pid) {
@@ -2065,12 +2676,15 @@ function evlogToggleAll(checked) {
 async function evlogDeleteSelected() {
   const ids = [...document.querySelectorAll('.evlog-cb:checked')].map(cb => parseInt(cb.dataset.id));
   if (!ids.length) return;
-  if (!confirm(`Delete ${ids.length} selected event(s)?`)) return;
+  if (!requireOperatorConfirm('DELETE', `Delete ${ids.length} selected event(s)?`)) return;
+  recordAudit('EVENT DELETE', `${ids.length} selected`);
   await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})});
   loadEventLog();
 }
 
 async function evlogDeleteOne(id) {
+  if (!confirm(`Delete event ${id}?`)) return;
+  recordAudit('EVENT DELETE', `event ${id}`);
   await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids:[id]})});
   const row = document.getElementById(`evrow-${id}`);
   if (row) row.remove();
@@ -2078,7 +2692,8 @@ async function evlogDeleteOne(id) {
 }
 
 async function evlogClearAll() {
-  if (!confirm('Delete ALL events from the log? This cannot be undone.')) return;
+  if (!requireOperatorConfirm('CLEAR', 'Delete ALL events from the log? This cannot be undone.')) return;
+  recordAudit('EVENT CLEAR', 'all events');
   await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({all:true})});
   loadEventLog();
 }
@@ -2210,6 +2825,138 @@ async function loadTrends() {
     body.innerHTML = heatHtml + velHtml + schedHtml + anomHtml + camHtml + detHtml;
   } catch {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function loadOperations() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">BUILDING OPERATOR VIEW...</div>';
+  try {
+    const [eventsRes, profilesRes, alertsRes, velocityRes, entitiesRes, forecastRes] = await Promise.all([
+      fetch('/api/events?limit=60').catch(() => null),
+      fetch('/api/profiles').catch(() => null),
+      fetch('/api/intel/alerts').catch(() => null),
+      fetch('/api/intel/velocity').catch(() => null),
+      fetch('/api/intel/entities').catch(() => null),
+      fetch('/api/intel/forecast').catch(() => null),
+    ]);
+    const events = eventsRes && eventsRes.ok ? await eventsRes.json() : [];
+    const profiles = profilesRes && profilesRes.ok ? await profilesRes.json() : [];
+    const alerts = alertsRes && alertsRes.ok ? await alertsRes.json() : [];
+    const velocity = velocityRes && velocityRes.ok ? await velocityRes.json() : {};
+    const entities = entitiesRes && entitiesRes.ok ? await entitiesRes.json() : {};
+    const forecast = forecastRes && forecastRes.ok ? await forecastRes.json() : {};
+
+    const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    const todayTs = todayStart.getTime() / 1000;
+    const todayEvents = events.filter(e => e.ts >= todayTs);
+    const highAlerts = alerts.filter(a => ['high','critical','red'].includes(String(a.severity).toLowerCase())).length;
+    const activeFeeds = visibleCams().length;
+    const trend = velocity.trend || 'stable';
+    const trendText = velocity.delta_pct === undefined ? '--' : `${trend.toUpperCase()} ${velocity.delta_pct > 0 ? '+' : ''}${velocity.delta_pct}%`;
+
+    const kpis = `
+      <div class="ops-kpis">
+        <div class="ops-kpi"><div class="ops-kpi-val">${todayEvents.length}</div><div class="ops-kpi-label">EVENTS TODAY</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val" style="color:${highAlerts ? 'var(--red)' : 'var(--green)'}">${highAlerts}</div><div class="ops-kpi-label">HIGH ALERTS</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val">${profiles.length}</div><div class="ops-kpi-label">KNOWN PROFILES</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val" style="font-size:12px;color:var(--cyan)">${trendText}</div><div class="ops-kpi-label">EVENT VELOCITY</div></div>
+      </div>`;
+
+    const replay = events.slice(0, 12).map(ev => {
+      const dt = new Date(ev.ts * 1000);
+      const time = dt.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true});
+      const tags = (ev.tags || 'NO AI DATA').replaceAll(',', ' · ');
+      const camLabel = esc((ev.camera_id || '').toUpperCase());
+      const timeSafe = esc(time);
+      const snap = ev.archived_snap ? `<button class="ops-link" onclick="openMediaPreview(${ev.id}, 'snap', '${camLabel}', '${timeSafe}', ${!!ev.starred})">SNAP</button>` : '';
+      const clip = ev.archived_clip ? `<button class="ops-link" onclick="openMediaPreview(${ev.id}, 'clip', '${camLabel}', '${timeSafe}', ${!!ev.starred})">CLIP</button>` : '';
+      return `<div class="ops-event" onclick="openMediaPreview(${ev.id}, '${ev.archived_clip ? 'clip' : 'snap'}', '${camLabel}', '${timeSafe}', ${!!ev.starred})" style="cursor:pointer;">
+        <div class="ops-time">${time}</div>
+        <div class="ops-cam">${camLabel}</div>
+        <div class="ops-tags">${esc(tags)}</div>
+        <div style="display:flex;gap:5px;" onclick="event.stopPropagation()">${snap}${clip}</div>
+      </div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:9px;">No replay events yet.</div>';
+
+    const entList = (entities.entities || profiles || []).slice(0, 7).map(e => {
+      const label = e.label || e.entity_id || `PROFILE-${String(e.id || '').padStart(3,'0')}`;
+      const sightings = e.sightings || e.observations || 0;
+      const cams = Array.isArray(e.cameras) ? e.cameras.join(' · ') : (e.cameras || e.last_camera || '—');
+      const behavior = e.behavior_class || e.type || (sightings > 5 ? 'regular' : 'unknown');
+      return `<div class="ops-entity">
+        <div class="ops-entity-main"><span>${String(label).toUpperCase()}</span><span>${sightings} OBS</span></div>
+        <div class="ops-entity-sub">CLASS: ${String(behavior).toUpperCase()} · CAMERAS: ${String(cams).toUpperCase()}</div>
+      </div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:9px;">No entities resolved yet.</div>';
+
+    const scenarios = (forecast.scenarios || []).slice(0, 4).map(s => {
+      const p = Math.round((s.probability || s.score || 0) * 100);
+      return `<div class="ops-event" style="grid-template-columns:90px 1fr 48px;">
+        <div class="ops-cam">${String(s.type || 'SCENARIO').toUpperCase()}</div>
+        <div class="ops-tags">${s.summary || s.description || s.message || 'Pending more observations'}</div>
+        <div class="ops-time">${p ? p + '%' : '--'}</div>
+      </div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:9px;">No forward scenarios active.</div>';
+
+    const audit = loadJSON('palm.auditLog', []).slice(0, 8).map(a => {
+      const dt = new Date(a.ts).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false});
+      return `<div class="ops-log-line"><span>${a.action}</span><span>${dt} · ${a.detail || ''}</span></div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:9px;">No operator actions logged in this browser.</div>';
+
+    const hiddenList = hiddenPublicSources.length
+      ? `<div style="color:var(--dim);font-size:8px;line-height:1.8;">HIDDEN: ${hiddenPublicSources.join(' · ')}</div>`
+      : '<div style="color:var(--dim);font-size:8px;">No hidden public sources.</div>';
+    const customList = customPublicSources.map(c => `
+      <div class="ops-log-line">
+        <span>${c.label}</span>
+        <button class="ops-link" onclick="deleteCustomSource('${c.id}')">REMOVE</button>
+      </div>`).join('') || '<div style="color:var(--dim);font-size:8px;">No manual sources added yet.</div>';
+
+    body.innerHTML = `
+      ${kpis}
+      <div class="ops-grid">
+        <div>
+          <div class="ops-section">
+            <div class="ops-title"><span>REPLAY TIMELINE</span><button class="ops-link" onclick="openAIPanel('events')">EVENT LOG</button></div>
+            ${replay}
+          </div>
+          <div class="ops-section">
+            <div class="ops-title"><span>FORWARD INTEL</span><button class="ops-link" onclick="palantirQuery('forecast')">ASK AGENT</button></div>
+            ${scenarios}
+          </div>
+        </div>
+        <div>
+          <div class="ops-section">
+            <div class="ops-title"><span>ENTITY GRAPH</span><span>${entities.stats?.entities || profiles.length || 0} NODES</span></div>
+            ${entList}
+          </div>
+          <div class="ops-section">
+            <div class="ops-title"><span>PUBLIC SOURCE CONTROL</span><span>${activeFeeds} ACTIVE</span></div>
+            <div class="ops-form">
+              <input id="source-label" placeholder="Label">
+              <input id="source-loc" placeholder="Location">
+              <select id="source-type">
+                <option value="angelcam">Embed / iframe</option>
+                <option value="hls">HLS .m3u8</option>
+                <option value="jpeg">JPEG refresh</option>
+              </select>
+              <input id="source-url" placeholder="URL">
+              <button class="ops-btn wide" onclick="addCustomSource()">ADD SOURCE</button>
+              <button class="ops-btn secondary wide" onclick="restoreHiddenSources()">RESTORE HIDDEN PUBLIC SOURCES</button>
+            </div>
+            <div style="margin-top:12px;">${hiddenList}</div>
+            <div style="margin-top:10px;">${customList}</div>
+          </div>
+          <div class="ops-section">
+            <div class="ops-title"><span>OPERATOR AUDIT</span><span>LOCAL</span></div>
+            ${audit}
+          </div>
+        </div>
+      </div>`;
+    syncSourceCounts();
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · operator source controls still available after service returns</div>';
   }
 }
 
@@ -2386,19 +3133,24 @@ async function loadStorage() {
 
       <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-top:20px;margin-bottom:8px;">SD CARD BACKFILL</div>
       <div style="font-size:8px;color:var(--text);margin-bottom:10px;line-height:1.6;">
-        Pull historical recordings off the doorbell SD card into the event DB.
+        Pull historical recordings off eligible Tapo camera SD cards into the event DB.
         Skips anything already captured live.
       </div>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
         <span style="font-size:8px;color:var(--dim)">LAST</span>
-        <input id="backfill-days" type="number" value="7" min="1" max="90"
+        <input id="backfill-hours" type="number" value="24" min="1" max="2160"
           style="width:50px;background:#0a0c0f;border:1px solid var(--border2);color:var(--text);
                  font-family:inherit;font-size:9px;padding:4px 6px;text-align:center;">
-        <span style="font-size:8px;color:var(--dim)">DAYS</span>
-        <button onclick="startBackfill('doorbell')" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+        <span style="font-size:8px;color:var(--dim)">HOURS</span>
+        <button onclick="startBackfill('all')" style="font-family:inherit;font-size:8px;letter-spacing:1px;
           padding:6px 14px;background:rgba(0,255,180,0.06);border:1px solid rgba(0,255,180,0.3);
           color:var(--cyan);cursor:pointer;">
-          PULL FROM SD CARD
+          PULL ALL TAPO SD
+        </button>
+        <button onclick="startBackfill('doorbell')" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:6px 10px;background:transparent;border:1px solid var(--border2);
+          color:var(--dim);cursor:pointer;">
+          DOORBELL ONLY
         </button>
       </div>
       <div id="backfill-status" style="font-size:8px;color:var(--dim);letter-spacing:0.5px;min-height:18px;margin-bottom:16px;"></div>
@@ -2423,8 +3175,9 @@ async function previewPurge() {
 }
 
 async function runPurge() {
-  if (!confirm(`Permanently delete non-starred events older than ${document.getElementById('purge-days-input').value} days?`)) return;
+  if (!requireOperatorConfirm('PURGE', `Permanently delete non-starred events older than ${document.getElementById('purge-days-input').value} days?`)) return;
   const days   = parseInt(document.getElementById('purge-days-input').value) || 14;
+  recordAudit('MEDIA PURGE', `older than ${days} days`);
   const res    = await fetch('/api/media/purge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({days, dry_run: false})});
   const result = await res.json();
   const mb     = (result.bytes_freed / 1_048_576).toFixed(1);
@@ -2447,11 +3200,13 @@ async function loadArchiveEvents() {
       const hasClip = e.archived_clip;
       const hasSnap = e.archived_snap;
       const starred = e.starred ? '★ ' : '';
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border2);">
+      const camLabel = esc((e.camera_id||'').toUpperCase());
+      const timeSafe = esc(time);
+      return `<div class="storage-row" onclick="openMediaPreview(${e.id}, '${hasClip ? 'clip' : 'snap'}', '${camLabel}', '${timeSafe}', ${!!e.starred})" style="cursor:pointer;">
         <span style="color:${e.starred ? 'var(--yellow)' : 'var(--text)'}">${starred}${time} · ${(e.camera_id||'').toUpperCase()}</span>
-        <span style="display:flex;gap:6px;align-items:center;">
-          ${hasSnap ? `<a href="/archived/snap/${e.id}" target="_blank" style="color:var(--cyan);font-size:7px;letter-spacing:1px;text-decoration:none;">SNAP</a>` : ''}
-          ${hasClip ? `<a href="/archived/clip/${e.id}" target="_blank" style="color:var(--cyan);font-size:7px;letter-spacing:1px;text-decoration:none;">CLIP</a>` : ''}
+        <span style="display:flex;gap:6px;align-items:center;" onclick="event.stopPropagation()">
+          ${hasSnap ? `<button class="ops-link" onclick="openMediaPreview(${e.id}, 'snap', '${camLabel}', '${timeSafe}', ${!!e.starred})">SNAP</button>` : ''}
+          ${hasClip ? `<button class="ops-link" onclick="openMediaPreview(${e.id}, 'clip', '${camLabel}', '${timeSafe}', ${!!e.starred})">CLIP</button>` : ''}
           <button onclick="starEvent(${e.id}, ${!e.starred})" style="font-family:inherit;font-size:7px;background:transparent;border:none;color:${e.starred ? 'var(--yellow)' : 'var(--dim)'};cursor:pointer;letter-spacing:1px;">
             ${e.starred ? '★ UNSTAR' : '☆ STAR'}
           </button>
@@ -2462,35 +3217,95 @@ async function loadArchiveEvents() {
 }
 
 async function starEvent(eventId, starred) {
+  recordAudit(starred ? 'EVENT STARRED' : 'EVENT UNSTARRED', `event ${eventId}`);
   await fetch(`/api/event/${eventId}/star`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({starred})});
   loadArchiveEvents();
 }
 
+function closeMediaPreview() {
+  const drawer = document.getElementById('media-drawer');
+  const body = document.getElementById('media-drawer-body');
+  if (drawer) drawer.classList.remove('open');
+  if (body) body.innerHTML = '';
+}
+
+function openMediaPreview(eventId, kind = 'snap', cam = 'CAM', time = 'EVENT', starred = false) {
+  const drawer = document.getElementById('media-drawer');
+  const body = document.getElementById('media-drawer-body');
+  const title = document.getElementById('media-drawer-title');
+  if (!drawer || !body) return;
+  const isClip = kind === 'clip';
+  if (title) title.textContent = `${cam} · ${time}`;
+  const media = isClip
+    ? `<video class="media-preview" src="/archived/clip/${eventId}" controls autoplay muted playsinline></video>`
+    : `<img class="media-preview" src="/archived/snap/${eventId}" alt="">`;
+  body.innerHTML = `
+    ${media}
+    <div class="media-meta-grid">
+      <div class="stor-stat"><div class="stor-val" style="font-size:10px">${esc(cam)}</div><div class="stor-lbl">CAMERA</div></div>
+      <div class="stor-stat"><div class="stor-val" style="font-size:10px">${esc(kind.toUpperCase())}</div><div class="stor-lbl">MEDIA</div></div>
+      <div class="stor-stat"><div class="stor-val" style="font-size:10px;color:${starred ? 'var(--yellow)' : 'var(--dim)'}">${starred ? 'STARRED' : 'UNSTARRED'}</div><div class="stor-lbl">RETENTION</div></div>
+    </div>
+    <div class="profile-action-row" style="margin-top:12px;">
+      <button class="profile-action good" onclick="starEvent(${eventId}, true); openMediaPreview(${eventId}, '${kind}', '${esc(cam)}', '${esc(time)}', true)">KEEP</button>
+      <button class="profile-action" onclick="starEvent(${eventId}, false); openMediaPreview(${eventId}, '${kind}', '${esc(cam)}', '${esc(time)}', false)">UNSTAR</button>
+      <a class="profile-action" href="/archived/snap/${eventId}" target="_blank" style="text-decoration:none;">OPEN SNAP</a>
+      <a class="profile-action" href="/archived/clip/${eventId}" target="_blank" style="text-decoration:none;">OPEN CLIP</a>
+      <button class="profile-action danger" onclick="deleteStorageEvent(${eventId})">DELETE EVENT</button>
+    </div>
+  `;
+  drawer.classList.add('open');
+}
+
+async function deleteStorageEvent(eventId) {
+  if (!requireOperatorConfirm('DELETE', `Delete event ${eventId}? This removes the event record from storage.`)) return;
+  recordAudit('STORAGE EVENT DELETE', `event ${eventId}`);
+  await fetch('/api/events/delete', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ids:[eventId]}),
+  });
+  closeMediaPreview();
+  if (aiCurrentTab === 'storage') loadStorage();
+  if (aiCurrentTab === 'ops') loadOperations();
+}
+
 let _backfillPoll = null;
 async function startBackfill(camId) {
-  const days = parseInt(document.getElementById('backfill-days').value) || 7;
+  const hours = parseFloat(document.getElementById('backfill-hours').value) || 24;
   const el   = document.getElementById('backfill-status');
   if (el) el.innerHTML = '<span style="color:var(--cyan)">STARTING JOB...</span>';
   try {
     const res  = await fetch(`/api/backfill/${camId}`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({days})
+      body: JSON.stringify({hours})
     });
     const data = await res.json();
-    if (!data.job_id) { if(el) el.innerHTML = `<span style="color:var(--red)">ERROR: ${data.error||'unknown'}</span>`; return; }
-    const jobId = data.job_id;
+    const jobs = data.jobs || (data.job_id ? [{cam: data.cam || camId, job_id: data.job_id}] : []);
+    if (!jobs.length) { if(el) el.innerHTML = `<span style="color:var(--red)">ERROR: ${data.error||'unknown'}</span>`; return; }
+    recordAudit('BACKFILL STARTED', `${jobs.map(j => j.cam).join(', ')} · ${hours} hours`);
     if (_backfillPoll) clearInterval(_backfillPoll);
     _backfillPoll = setInterval(async () => {
       try {
-        const sr = await fetch(`/api/backfill/status/${jobId}`);
-        const s  = await sr.json();
-        if (!s) return;
-        const msg = `${s.status?.toUpperCase()} · found ${s.found} · imported ${s.imported} · skipped ${s.skipped} · err ${s.errors}`;
+        const statuses = [];
+        for (const job of jobs) {
+          const sr = await fetch(`/api/backfill/status/${job.job_id}`);
+          if (sr.ok) statuses.push(await sr.json());
+        }
+        if (!statuses.length) return;
+        const totals = statuses.reduce((acc, s) => {
+          acc.found += s.found || 0; acc.imported += s.imported || 0;
+          acc.skipped += s.skipped || 0; acc.errors += s.errors || 0;
+          acc.done = acc.done && !!s.done;
+          return acc;
+        }, {found:0, imported:0, skipped:0, errors:0, done:true});
+        const active = statuses.map(s => `${String(s.cam||'cam').toUpperCase()}:${String(s.status||'queued').toUpperCase()}`).join(' · ');
+        const msg = `${active} · found ${totals.found} · imported ${totals.imported} · skipped ${totals.skipped} · err ${totals.errors}`;
         if (el) el.innerHTML = `<span style="color:var(--cyan)">${msg}</span>`;
-        if (s.done) {
+        if (totals.done) {
           clearInterval(_backfillPoll);
           _backfillPoll = null;
-          if (el) el.innerHTML = `<span style="color:var(--green)">✓ DONE · ${s.imported} clips imported · ${s.skipped} already had</span>`;
+          if (el) el.innerHTML = `<span style="color:var(--green)">✓ DONE · ${totals.imported} clips imported · ${totals.skipped} already had</span>`;
           loadArchiveEvents();
         }
       } catch { /* polling error */ }
@@ -2727,7 +3542,8 @@ document.addEventListener('keydown', e => {
 
 // ── INIT ─────────────────────────────────────────────────────────
 // Stagger starting cam indices so tiles show different cams on load
-for (let i = 0; i < tileCount; i++) tileIndices[i] = i % CAMS.length;
+syncSourceCounts();
+for (let i = 0; i < tileCount; i++) tileIndices[i] = CAMS.length ? i % CAMS.length : 0;
 for (let i = 0; i < tileCount; i++) {
   renderTile(i);
   scheduleRotation(i);

@@ -354,16 +354,18 @@ async def backfill_camera(
 
 # ── Called from camera_watcher API endpoint ────────────────────────────────
 
-def start_backfill_job(cam_cfg: dict, days: int = 7) -> str:
+def start_backfill_job(cam_cfg: dict, days: float = 7, hours: Optional[float] = None) -> str:
     """Launch a backfill in a background asyncio task. Returns job_id."""
     import threading, uuid
 
+    lookback = timedelta(hours=hours) if hours is not None else timedelta(days=days)
     today      = datetime.now().strftime("%Y%m%d")
-    start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+    start_date = (datetime.now() - lookback).strftime("%Y%m%d")
     job_id     = f"{cam_cfg['id']}_{int(time.time())}"
 
     _jobs[job_id] = {
         "cam": cam_cfg["id"], "status": "queued",
+        "hours": round(lookback.total_seconds() / 3600, 2),
         "found": 0, "imported": 0, "skipped": 0, "errors": 0,
         "done": False, "log": [],
     }
