@@ -10,7 +10,7 @@ import socket
 import threading
 import urllib.request
 import urllib.error
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import SimpleHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 
 DASHBOARD_DIR = Path(__file__).parent / "dashboard"
@@ -187,6 +187,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", SERVE_PORT), DashboardHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", SERVE_PORT), DashboardHandler)
     print(f"PALM COMMAND dashboard → http://0.0.0.0:{SERVE_PORT}", flush=True)
     server.serve_forever()
