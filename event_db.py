@@ -174,6 +174,7 @@ def get_recent_events(
     q = (
         "SELECT e.id, e.camera_id, e.ts, e.day_of_week, e.hour, "
         "e.clip_path, e.snap_path, e.created_at, "
+        "e.starred, e.archived_clip, e.archived_snap, "
         "GROUP_CONCAT(d.class_name || ':' || ROUND(d.confidence, 2)) AS tags "
         "FROM events e "
         "LEFT JOIN detections d ON d.event_id = e.id "

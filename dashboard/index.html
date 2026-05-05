@@ -1981,7 +1981,7 @@ async function loadEventLog() {
   const body = document.getElementById('ai-body');
   body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING...</div>';
   try {
-    const res    = await fetch('/api/events?limit=100');
+    const res    = await fetch('/api/events?limit=200');
     const events = await res.json();
     if (!events.length) {
       body.innerHTML = '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO EVENTS YET</div>';
@@ -1989,7 +1989,28 @@ async function loadEventLog() {
       return;
     }
     document.getElementById('sb-event-count').textContent = events.length + ' EVENTS';
-    body.innerHTML = events.map(ev => {
+
+    const toolbar = `
+      <div id="evlog-toolbar" style="display:flex;gap:8px;align-items:center;padding:8px 0 10px;border-bottom:1px solid var(--border2);margin-bottom:6px;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:8px;color:var(--dim);letter-spacing:1px;">
+          <input type="checkbox" id="evlog-select-all" onchange="evlogToggleAll(this.checked)"
+            style="accent-color:var(--cyan);cursor:pointer;">
+          SELECT ALL
+        </label>
+        <button onclick="evlogDeleteSelected()" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:4px 10px;background:rgba(255,60,60,0.08);border:1px solid rgba(255,60,60,0.3);
+          color:var(--red);cursor:pointer;">
+          DELETE SELECTED
+        </button>
+        <button onclick="evlogClearAll()" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:4px 10px;background:rgba(255,60,60,0.12);border:1px solid rgba(255,60,60,0.5);
+          color:var(--red);cursor:pointer;">
+          CLEAR ALL
+        </button>
+        <span id="evlog-sel-count" style="font-size:8px;color:var(--dim);letter-spacing:1px;margin-left:4px;"></span>
+      </div>`;
+
+    body.innerHTML = toolbar + events.map(ev => {
       const dt   = new Date(ev.ts * 1000);
       const time = dt.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true});
       const tags = (ev.tags || '').split(',').filter(Boolean).map(t => {
@@ -1998,24 +2019,68 @@ async function loadEventLog() {
         const pct  = Math.round(parseFloat(conf || 0) * 100);
         const clsMap = { person:'det-person', car:'det-car', truck:'det-car', bus:'det-car',
           motorcycle:'det-car', bicycle:'det-car', backpack:'det-backpack', handbag:'det-backpack', suitcase:'det-backpack' };
-        const clsCss = clsMap[cls2] || 'det-person';
-        return `<span class="det-tag ${clsCss}">${cls2.toUpperCase()} ${pct}%</span>`;
+        return `<span class="det-tag ${clsMap[cls2]||'det-person'}">${cls2.toUpperCase()} ${pct}%</span>`;
       }).join('');
-      const snapSrc = ev.snap_path
-        ? `/api/snap/${ev.camera_id}?t=${ev.ts}`
-        : '';
-      const snapEl = snapSrc
-        ? `<img class="ai-ev-snap" src="${snapSrc}" alt="">` : '';
-      return `<div class="ai-event-row">
-        <span class="ai-ev-time">${time}</span>
-        <span class="ai-ev-cam">${(ev.camera_id || '').toUpperCase()}</span>
-        <div class="ai-ev-tags">${tags || '<span style="color:var(--dim);font-size:8px">NO AI DATA</span>'}</div>
-        ${snapEl}
+      const snapEl = ev.snap_path
+        ? `<img class="ai-ev-snap" src="/api/snap/${ev.camera_id}?t=${ev.ts}" alt="">` : '';
+      return `<div class="ai-event-row" id="evrow-${ev.id}" style="display:flex;align-items:flex-start;gap:6px;">
+        <input type="checkbox" class="evlog-cb" data-id="${ev.id}" onchange="evlogUpdateCount()"
+          style="margin-top:3px;accent-color:var(--cyan);cursor:pointer;flex-shrink:0;">
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span class="ai-ev-time">${time}</span>
+            <span class="ai-ev-cam">${(ev.camera_id||'').toUpperCase()}</span>
+            <button onclick="evlogDeleteOne(${ev.id})" title="Delete this event"
+              style="font-family:inherit;font-size:7px;letter-spacing:1px;padding:2px 6px;
+              background:transparent;border:1px solid rgba(255,60,60,0.25);color:rgba(255,80,80,0.6);
+              cursor:pointer;flex-shrink:0;">✕</button>
+          </div>
+          <div class="ai-ev-tags" style="margin-top:3px;">${tags||'<span style="color:var(--dim);font-size:8px">NO AI DATA</span>'}</div>
+          ${snapEl}
+        </div>
       </div>`;
     }).join('');
   } catch {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
   }
+}
+
+function evlogUpdateCount() {
+  const checked = document.querySelectorAll('.evlog-cb:checked').length;
+  const el = document.getElementById('evlog-sel-count');
+  if (el) el.textContent = checked ? `${checked} SELECTED` : '';
+  const all = document.getElementById('evlog-select-all');
+  if (all) {
+    const total = document.querySelectorAll('.evlog-cb').length;
+    all.indeterminate = checked > 0 && checked < total;
+    all.checked = total > 0 && checked === total;
+  }
+}
+
+function evlogToggleAll(checked) {
+  document.querySelectorAll('.evlog-cb').forEach(cb => cb.checked = checked);
+  evlogUpdateCount();
+}
+
+async function evlogDeleteSelected() {
+  const ids = [...document.querySelectorAll('.evlog-cb:checked')].map(cb => parseInt(cb.dataset.id));
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} selected event(s)?`)) return;
+  await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids})});
+  loadEventLog();
+}
+
+async function evlogDeleteOne(id) {
+  await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ids:[id]})});
+  const row = document.getElementById(`evrow-${id}`);
+  if (row) row.remove();
+  evlogUpdateCount();
+}
+
+async function evlogClearAll() {
+  if (!confirm('Delete ALL events from the log? This cannot be undone.')) return;
+  await fetch('/api/events/delete', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({all:true})});
+  loadEventLog();
 }
 
 async function loadTrends() {
@@ -2319,7 +2384,26 @@ async function loadStorage() {
       </div>
       <div id="purge-result" style="font-size:8px;color:var(--dim);letter-spacing:1px;min-height:20px;"></div>
 
-      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-top:20px;margin-bottom:8px;">EVENT LOG WITH ARCHIVE</div>
+      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-top:20px;margin-bottom:8px;">SD CARD BACKFILL</div>
+      <div style="font-size:8px;color:var(--text);margin-bottom:10px;line-height:1.6;">
+        Pull historical recordings off the doorbell SD card into the event DB.
+        Skips anything already captured live.
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <span style="font-size:8px;color:var(--dim)">LAST</span>
+        <input id="backfill-days" type="number" value="7" min="1" max="90"
+          style="width:50px;background:#0a0c0f;border:1px solid var(--border2);color:var(--text);
+                 font-family:inherit;font-size:9px;padding:4px 6px;text-align:center;">
+        <span style="font-size:8px;color:var(--dim)">DAYS</span>
+        <button onclick="startBackfill('doorbell')" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:6px 14px;background:rgba(0,255,180,0.06);border:1px solid rgba(0,255,180,0.3);
+          color:var(--cyan);cursor:pointer;">
+          PULL FROM SD CARD
+        </button>
+      </div>
+      <div id="backfill-status" style="font-size:8px;color:var(--dim);letter-spacing:0.5px;min-height:18px;margin-bottom:16px;"></div>
+
+      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-top:4px;margin-bottom:8px;">EVENT LOG WITH ARCHIVE</div>
       <div id="storage-event-list" style="font-size:8px;color:var(--dim);letter-spacing:0.5px;">Loading archive events...</div>
     `;
 
@@ -2380,6 +2464,40 @@ async function loadArchiveEvents() {
 async function starEvent(eventId, starred) {
   await fetch(`/api/event/${eventId}/star`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({starred})});
   loadArchiveEvents();
+}
+
+let _backfillPoll = null;
+async function startBackfill(camId) {
+  const days = parseInt(document.getElementById('backfill-days').value) || 7;
+  const el   = document.getElementById('backfill-status');
+  if (el) el.innerHTML = '<span style="color:var(--cyan)">STARTING JOB...</span>';
+  try {
+    const res  = await fetch(`/api/backfill/${camId}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({days})
+    });
+    const data = await res.json();
+    if (!data.job_id) { if(el) el.innerHTML = `<span style="color:var(--red)">ERROR: ${data.error||'unknown'}</span>`; return; }
+    const jobId = data.job_id;
+    if (_backfillPoll) clearInterval(_backfillPoll);
+    _backfillPoll = setInterval(async () => {
+      try {
+        const sr = await fetch(`/api/backfill/status/${jobId}`);
+        const s  = await sr.json();
+        if (!s) return;
+        const msg = `${s.status?.toUpperCase()} · found ${s.found} · imported ${s.imported} · skipped ${s.skipped} · err ${s.errors}`;
+        if (el) el.innerHTML = `<span style="color:var(--cyan)">${msg}</span>`;
+        if (s.done) {
+          clearInterval(_backfillPoll);
+          _backfillPoll = null;
+          if (el) el.innerHTML = `<span style="color:var(--green)">✓ DONE · ${s.imported} clips imported · ${s.skipped} already had</span>`;
+          loadArchiveEvents();
+        }
+      } catch { /* polling error */ }
+    }, 3000);
+  } catch(e) {
+    if (el) el.innerHTML = `<span style="color:var(--red)">FAILED: ${e}</span>`;
+  }
 }
 
 async function loadStorageStats() {

@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlparse
 import ai_engine
 import event_db
 import profiler
+import backfill_tapo
 import trend_analyzer
 import intel_engine
 import query_agent
@@ -458,14 +459,21 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
     cam_id     = cam_cfg["id"]
     ip         = cam_cfg["ip"]
     port       = int(cam_cfg.get("port", 8800))
-    poll_s     = float(cam_cfg.get("poll_interval", 8))
-    cooldown_s = float(cam_cfg.get("cooldown", 30))
-    was_online = False
-    capturing  = False
-    last_cap   = 0.0
-    state      = cameras[cam_id]
+    poll_s     = float(cam_cfg.get("poll_interval", 3))
+    cooldown_s = float(cam_cfg.get("cooldown", 300))
+    # Require this many consecutive open polls before firing.
+    # Wind/trees cause single-poll blips; a person walking up holds the port
+    # open for multiple polls in a row. Default 2 = one confirmation poll.
+    confirm_needed = int(cam_cfg.get("motion_confirm", 2))
 
-    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {poll_s}s cooldown={cooldown_s}s", flush=True)
+    was_online     = False
+    capturing      = False
+    last_cap       = 0.0
+    confirm_streak = 0          # consecutive polls where port was open
+    state          = cameras[cam_id]
+
+    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {poll_s}s "
+          f"cooldown={cooldown_s}s confirm={confirm_needed}", flush=True)
 
     while True:
         try:
@@ -476,15 +484,22 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
             except Exception:
                 pass
 
+            # Port is open — increment confirmation streak
+            confirm_streak += 1
+
             in_cooldown = (time.time() - last_cap) < cooldown_s
-            if not was_online and not capturing and not in_cooldown:
-                was_online    = True
-                capturing     = True
-                state.online  = True
+            # Fire only once we've seen enough consecutive opens AND we're not
+            # already capturing or in cooldown
+            if confirm_streak >= confirm_needed and not was_online and not capturing and not in_cooldown:
+                was_online      = True
+                capturing       = True
+                confirm_streak  = 0
+                state.online    = True
                 state.last_seen = time.time()
-                state.events += 1
+                state.events   += 1
                 ts_str = datetime.now().strftime("%H:%M:%S")
-                print(f"[{ts_str}] [{cam_id}] MOTION #{state.events}", flush=True)
+                print(f"[{ts_str}] [{cam_id}] MOTION #{state.events} "
+                      f"(confirmed {confirm_needed} polls)", flush=True)
 
                 async def _capture(cfg=cam_cfg, cid=cam_id):
                     nonlocal capturing, was_online, last_cap
@@ -503,6 +518,8 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
                 asyncio.create_task(_capture())
 
         except Exception:
+            # Port closed — reset streak, clear online flag
+            confirm_streak = 0
             if was_online and not capturing:
                 state.online = False
             if not capturing:
@@ -1132,6 +1149,21 @@ class Handler(BaseHTTPRequestHandler):
                 self._not_found(); return
             self._json(forward_intel.classify_entity(eid))
 
+        # ─── SD card backfill ───────────────────────────────────────────
+        elif parsed.path.startswith("/api/backfill/status/"):
+            job_id = parsed.path.split("/api/backfill/status/", 1)[1].rstrip("/")
+            status = backfill_tapo.get_job_status(job_id)
+            if status is None:
+                self._not_found(); return
+            safe = {k: v for k, v in status.items() if k != "log"}
+            self._json(safe)
+
+        elif p == "/api/backfill/jobs":
+            self._json({"jobs": [
+                {k: v for k, v in j.items() if k != "log"}
+                for j in backfill_tapo.list_jobs()
+            ]})
+
         # ─── Field Scan (phone app) ─────────────────────────────────────
         elif p == "/scan/history":
             limit = min(int(parse_qs(parsed.query).get("limit", ["50"])[0]), 200)
@@ -1339,6 +1371,44 @@ class Handler(BaseHTTPRequestHandler):
                 days = ARCHIVE_RETENTION_DAYS; dry_run = False
             result = _purge_old_media(days=days, dry_run=dry_run)
             self._json(result)
+
+        # POST /api/backfill/<cam_id>  {"days": 7}
+        elif parsed.path.startswith("/api/backfill/") and not parsed.path.startswith("/api/backfill/status"):
+            cam_id = parsed.path.split("/api/backfill/", 1)[1].rstrip("/")
+            if cam_id not in cameras:
+                self._json({"error": f"unknown camera: {cam_id}"}); return
+            # Look up the camera config
+            cfg_list = load_config()
+            cam_cfg  = next((c for c in cfg_list if c["id"] == cam_id), None)
+            if not cam_cfg or cam_cfg.get("type") != "tapo":
+                self._json({"error": f"{cam_id} is not a Tapo camera"}); return
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+                days = int(data.get("days", 7))
+            except Exception:
+                days = 7
+            job_id = backfill_tapo.start_backfill_job(cam_cfg, days=days)
+            self._json({"ok": True, "job_id": job_id, "cam": cam_id, "days": days})
+
+        # POST /events/delete  {"ids": [1,2,3]}  or {"all": true}
+        elif p == "/events/delete":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            if data.get("all"):
+                with __import__("sqlite3").connect(str(event_db.DB_PATH)) as _c:
+                    _c.execute("DELETE FROM events")
+                    deleted = _c.execute("SELECT changes()").fetchone()[0]
+                self._json({"ok": True, "deleted": deleted})
+            else:
+                ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
+                deleted = event_db.purge_events(ids) if ids else 0
+                self._json({"ok": True, "deleted": deleted})
 
         # POST /event/<id>/star  {"starred": true}
         elif parsed.path.startswith("/event/") and parsed.path.endswith("/star"):

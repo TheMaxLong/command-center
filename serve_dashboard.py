@@ -33,6 +33,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             return
         if self.path.startswith("/api/"):
             self._proxy(WATCHER_URL, self.path[4:])  # strip /api
+        elif self.path.startswith("/archived/"):
+            self._proxy(WATCHER_URL, self.path)       # archived snap/clip media
         elif self.path.startswith("/go2rtc/"):
             self._proxy(GO2RTC_URL, self.path[7:])   # strip /go2rtc
         elif self.path.rstrip("/") == "/monitor" or self.path.startswith("/monitor?"):
