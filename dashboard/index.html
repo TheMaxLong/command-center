@@ -819,6 +819,24 @@
     }
     #pal-llm-badge.active { color: var(--green); border-color: var(--green-dim); background: rgba(0,212,106,0.12); }
 
+    .stor-stat {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border2);
+      padding: 8px 10px;
+      border-radius: 2px;
+    }
+    .stor-val {
+      font-size: 13px;
+      color: var(--text);
+      letter-spacing: 1px;
+      margin-bottom: 3px;
+    }
+    .stor-lbl {
+      font-size: 7px;
+      color: var(--dim);
+      letter-spacing: 1.5px;
+    }
+
     /* PALANTIR sidebar button glow when open */
     .city-btn.palantir-active {
       color: var(--green);
@@ -927,6 +945,10 @@
     <button class="city-btn ai-btn" onclick="window.open('/monitor','_blank')">
       MONITOR MODE
       <span class="cb-sub">DEDICATED CAMERA VIEW</span>
+    </button>
+    <button class="city-btn ai-btn" onclick="openStoragePanel()">
+      STORAGE
+      <span class="cb-sub" id="sb-storage-sub">LOADING...</span>
     </button>
     <button class="city-btn" id="btn-palantir" onclick="togglePalantir()">
       PALANTIR
@@ -1176,6 +1198,7 @@
     <button class="ai-tab"        id="tab-trends"   onclick="switchAITab('trends')">5-WEEK TRENDS</button>
     <button class="ai-tab"        id="tab-briefing" onclick="switchAITab('briefing')">BRIEFING</button>
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
+    <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -1840,6 +1863,7 @@ function switchAITab(tab) {
   else if (tab === 'trends')   loadTrends();
   else if (tab === 'briefing') loadBriefing();
   else if (tab === 'alerts')   loadAlerts();
+  else if (tab === 'storage')  loadStorage();
 }
 
 async function loadProfiles() {
@@ -2236,6 +2260,141 @@ async function loadAlerts() {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · start vision-watcher service</div>';
   }
 }
+
+function openStoragePanel() {
+  openAIPanel('storage');
+}
+
+async function loadStorage() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING STORAGE STATS...</div>';
+  try {
+    const res   = await fetch('/api/media/stats');
+    const stats = await res.json();
+
+    const sub = document.getElementById('sb-storage-sub');
+    const mb  = (stats.archive_bytes / 1_048_576).toFixed(1);
+    if (sub) sub.textContent = `${mb} MB · ${stats.archive_files} FILES`;
+
+    const oldest = stats.oldest_ts ? new Date(stats.oldest_ts * 1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    const newest = stats.newest_ts ? new Date(stats.newest_ts * 1000).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+    const retDays = stats.retention_days || 14;
+
+    body.innerHTML = `
+      <div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:16px;">STORAGE MANAGEMENT</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
+        <div class="stor-stat"><div class="stor-val">${(stats.archive_bytes/1_048_576).toFixed(1)} MB</div><div class="stor-lbl">ARCHIVED SIZE</div></div>
+        <div class="stor-stat"><div class="stor-val">${stats.archive_files}</div><div class="stor-lbl">ARCHIVED FILES</div></div>
+        <div class="stor-stat"><div class="stor-val">${stats.total_events}</div><div class="stor-lbl">TOTAL EVENTS</div></div>
+        <div class="stor-stat"><div class="stor-val" style="color:var(--yellow)">★ ${stats.starred_events}</div><div class="stor-lbl">STARRED (KEPT)</div></div>
+        <div class="stor-stat"><div class="stor-val" style="font-size:9px">${oldest}</div><div class="stor-lbl">OLDEST EVENT</div></div>
+        <div class="stor-stat"><div class="stor-val" style="font-size:9px">${newest}</div><div class="stor-lbl">NEWEST EVENT</div></div>
+      </div>
+
+      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-bottom:8px;">AUTO-CLEAN · EVERY 14 DAYS</div>
+      <div style="font-size:8px;color:var(--text);margin-bottom:16px;line-height:1.6;">
+        Non-starred events older than <span style="color:var(--green)">${retDays} days</span> are automatically deleted.<br>
+        Starred events are never auto-deleted.
+      </div>
+
+      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-bottom:8px;">MANUAL PURGE</div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <span style="font-size:8px;color:var(--dim)">DELETE OLDER THAN</span>
+        <input id="purge-days-input" type="number" value="${retDays}" min="1" max="365"
+          style="width:50px;background:#0a0c0f;border:1px solid var(--border2);color:var(--text);
+                 font-family:inherit;font-size:9px;padding:4px 6px;text-align:center;">
+        <span style="font-size:8px;color:var(--dim)">DAYS</span>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button onclick="previewPurge()" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:6px 12px;background:transparent;border:1px solid var(--border2);color:var(--dim);cursor:pointer;">
+          PREVIEW
+        </button>
+        <button onclick="runPurge()" style="font-family:inherit;font-size:8px;letter-spacing:1px;
+          padding:6px 12px;background:rgba(255,60,60,0.08);border:1px solid rgba(255,60,60,0.3);
+          color:var(--red);cursor:pointer;">
+          PURGE NOW
+        </button>
+      </div>
+      <div id="purge-result" style="font-size:8px;color:var(--dim);letter-spacing:1px;min-height:20px;"></div>
+
+      <div style="font-size:8px;color:var(--dim);letter-spacing:1.5px;margin-top:20px;margin-bottom:8px;">EVENT LOG WITH ARCHIVE</div>
+      <div id="storage-event-list" style="font-size:8px;color:var(--dim);letter-spacing:0.5px;">Loading archive events...</div>
+    `;
+
+    loadArchiveEvents();
+  } catch(e) {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE</div>';
+  }
+}
+
+async function previewPurge() {
+  const days    = parseInt(document.getElementById('purge-days-input').value) || 14;
+  const res     = await fetch('/api/media/purge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({days, dry_run: true})});
+  const result  = await res.json();
+  const mb      = (result.bytes_freed / 1_048_576).toFixed(1);
+  const el      = document.getElementById('purge-result');
+  if (el) el.innerHTML = `<span style="color:var(--cyan)">PREVIEW: ${result.purged_events} events · ${mb} MB would be freed</span>`;
+}
+
+async function runPurge() {
+  if (!confirm(`Permanently delete non-starred events older than ${document.getElementById('purge-days-input').value} days?`)) return;
+  const days   = parseInt(document.getElementById('purge-days-input').value) || 14;
+  const res    = await fetch('/api/media/purge', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({days, dry_run: false})});
+  const result = await res.json();
+  const mb     = (result.bytes_freed / 1_048_576).toFixed(1);
+  const el     = document.getElementById('purge-result');
+  if (el) el.innerHTML = `<span style="color:var(--green)">✓ PURGED ${result.deleted_records} events · ${mb} MB freed</span>`;
+  setTimeout(loadStorage, 1500);
+}
+
+async function loadArchiveEvents() {
+  const el = document.getElementById('storage-event-list');
+  if (!el) return;
+  try {
+    const res    = await fetch('/api/media/archive?limit=20');
+    const data   = await res.json();
+    const events = data.events || [];
+    if (!events.length) { el.innerHTML = '<span style="color:var(--dim)">No archived events yet — starts collecting on next trigger</span>'; return; }
+    el.innerHTML = events.map(e => {
+      const dt      = new Date(e.ts * 1000);
+      const time    = dt.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      const hasClip = e.archived_clip;
+      const hasSnap = e.archived_snap;
+      const starred = e.starred ? '★ ' : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border2);">
+        <span style="color:${e.starred ? 'var(--yellow)' : 'var(--text)'}">${starred}${time} · ${(e.camera_id||'').toUpperCase()}</span>
+        <span style="display:flex;gap:6px;align-items:center;">
+          ${hasSnap ? `<a href="/archived/snap/${e.id}" target="_blank" style="color:var(--cyan);font-size:7px;letter-spacing:1px;text-decoration:none;">SNAP</a>` : ''}
+          ${hasClip ? `<a href="/archived/clip/${e.id}" target="_blank" style="color:var(--cyan);font-size:7px;letter-spacing:1px;text-decoration:none;">CLIP</a>` : ''}
+          <button onclick="starEvent(${e.id}, ${!e.starred})" style="font-family:inherit;font-size:7px;background:transparent;border:none;color:${e.starred ? 'var(--yellow)' : 'var(--dim)'};cursor:pointer;letter-spacing:1px;">
+            ${e.starred ? '★ UNSTAR' : '☆ STAR'}
+          </button>
+        </span>
+      </div>`;
+    }).join('');
+  } catch { el.innerHTML = '<span style="color:var(--dim)">Could not load archive</span>'; }
+}
+
+async function starEvent(eventId, starred) {
+  await fetch(`/api/event/${eventId}/star`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({starred})});
+  loadArchiveEvents();
+}
+
+async function loadStorageStats() {
+  try {
+    const res   = await fetch('/api/media/stats');
+    const stats = await res.json();
+    const sub   = document.getElementById('sb-storage-sub');
+    if (sub) {
+      const mb = (stats.archive_bytes / 1_048_576).toFixed(1);
+      sub.textContent = `${mb} MB · ${stats.archive_files} FILES`;
+    }
+  } catch { /* watcher offline */ }
+}
+setInterval(loadStorageStats, 30000);
+loadStorageStats();
 
 async function refreshVelocity() {
   try {

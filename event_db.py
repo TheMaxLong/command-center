@@ -115,10 +115,16 @@ def init_db() -> None:
             -- (safe to run on existing databases)
         """)
         # Safe column-add migrations
-        try:
-            c.execute("ALTER TABLE detections ADD COLUMN instance INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
+        for migration in [
+            "ALTER TABLE detections ADD COLUMN instance INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE events ADD COLUMN starred INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE events ADD COLUMN archived_clip TEXT",
+            "ALTER TABLE events ADD COLUMN archived_snap TEXT",
+        ]:
+            try:
+                c.execute(migration)
+            except Exception:
+                pass
 
 
 # ── Events ────────────────────────────────────────────────────────
@@ -238,6 +244,68 @@ def get_detection_summary(
     q += "GROUP BY d.class_name ORDER BY count DESC"
     with _conn() as c:
         return [dict(r) for r in c.execute(q, params)]
+
+
+# ── Events: archive + storage management ─────────────────────────
+
+def set_event_archived_paths(event_id: int, archived_clip: Optional[str], archived_snap: Optional[str]) -> None:
+    with _conn() as c:
+        c.execute(
+            "UPDATE events SET archived_clip = ?, archived_snap = ? WHERE id = ?",
+            (archived_clip, archived_snap, event_id),
+        )
+
+
+def star_event(event_id: int, starred: bool) -> bool:
+    with _conn() as c:
+        c.execute("UPDATE events SET starred = ? WHERE id = ?", (int(starred), event_id))
+        return c.execute("SELECT changes()").fetchone()[0] > 0
+
+
+def get_media_stats() -> dict:
+    import time
+    with _conn() as c:
+        row = c.execute(
+            "SELECT COUNT(*) as total, SUM(starred) as starred, "
+            "MIN(ts) as oldest, MAX(ts) as newest "
+            "FROM events"
+        ).fetchone()
+        archived = c.execute(
+            "SELECT COUNT(*) as n FROM events WHERE archived_clip IS NOT NULL OR archived_snap IS NOT NULL"
+        ).fetchone()
+    return {
+        "total_events":    row["total"]   or 0,
+        "starred_events":  row["starred"] or 0,
+        "archived_events": archived["n"]  or 0,
+        "oldest_ts":       row["oldest"],
+        "newest_ts":       row["newest"],
+        "now_ts":          time.time(),
+    }
+
+
+def get_purgeable_events(older_than_days: int) -> list[dict]:
+    """Return non-starred events older than N days that have archived media files."""
+    import time
+    cutoff = time.time() - older_than_days * 86400
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, camera_id, ts, archived_clip, archived_snap "
+            "FROM events "
+            "WHERE ts < ? AND starred = 0 "
+            "AND (archived_clip IS NOT NULL OR archived_snap IS NOT NULL) "
+            "ORDER BY ts ASC",
+            (cutoff,),
+        )]
+
+
+def purge_events(event_ids: list[int]) -> int:
+    """Delete event records (cascade deletes detections). Returns deleted count."""
+    if not event_ids:
+        return 0
+    placeholders = ",".join("?" * len(event_ids))
+    with _conn() as c:
+        c.execute(f"DELETE FROM events WHERE id IN ({placeholders})", event_ids)
+        return c.execute("SELECT changes()").fetchone()[0]
 
 
 # ── Profiles: write ───────────────────────────────────────────────

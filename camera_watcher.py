@@ -104,6 +104,61 @@ def _tag_known_zones(cam_id: str, detections: list[dict], snap_path: Optional[st
     return detections
 
 
+ARCHIVE_RETENTION_DAYS = int(os.environ.get("ARCHIVE_RETENTION_DAYS", "14"))
+
+
+def _archive_media(cam_id: str, event_id: int, ts: float, clip_path: Optional[str], snap_path: Optional[str]) -> None:
+    """Save timestamped copies of clip + snap to archive dir. Tracks paths in DB."""
+    from datetime import datetime, timezone
+    dt  = datetime.fromtimestamp(ts, tz=timezone.utc)
+    tag = dt.strftime("%Y%m%d_%H%M%S") + f"_{event_id}"
+    arc_dir = MEDIA_DIR / cam_id / "archive"
+    arc_dir.mkdir(parents=True, exist_ok=True)
+
+    arc_clip = arc_snap = None
+    try:
+        if clip_path and Path(clip_path).exists():
+            dst = arc_dir / f"{tag}.mp4"
+            import shutil
+            shutil.copy2(clip_path, dst)
+            arc_clip = str(dst)
+    except Exception as e:
+        print(f"[archive] clip copy failed: {e}", flush=True)
+
+    try:
+        if snap_path and Path(snap_path).exists():
+            dst = arc_dir / f"{tag}.jpg"
+            import shutil
+            shutil.copy2(snap_path, dst)
+            arc_snap = str(dst)
+    except Exception as e:
+        print(f"[archive] snap copy failed: {e}", flush=True)
+
+    if arc_clip or arc_snap:
+        event_db.set_event_archived_paths(event_id, arc_clip, arc_snap)
+
+
+def _purge_old_media(days: int = ARCHIVE_RETENTION_DAYS, dry_run: bool = False) -> dict:
+    """Delete archived files + DB records for non-starred events older than N days."""
+    rows   = event_db.get_purgeable_events(days)
+    freed  = 0
+    ids    = []
+    for row in rows:
+        for path_key in ("archived_clip", "archived_snap"):
+            p = row.get(path_key)
+            if p:
+                f = Path(p)
+                if f.exists():
+                    freed += f.stat().st_size
+                    if not dry_run:
+                        f.unlink(missing_ok=True)
+        ids.append(row["id"])
+    deleted = 0
+    if not dry_run and ids:
+        deleted = event_db.purge_events(ids)
+    return {"purged_events": len(ids), "deleted_records": deleted, "bytes_freed": freed, "dry_run": dry_run}
+
+
 def _filter_exclusions(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
     """Drop detections whose center falls inside a configured exclusion zone."""
     zones = _exclusion_zones.get(cam_id)
@@ -231,6 +286,9 @@ def _run_ai_and_store(
     event_id = event_db.insert_event(cam_id, event_ts, clip_path, snap_path)
     if detections:
         event_db.add_detections(event_id, detections)
+
+    # ── Archive timestamped copies of clip + snap
+    _archive_media(cam_id, event_id, event_ts, clip_path, snap_path)
 
     if snap_path and detections:
         ai_engine.annotate(snap_path, detections)
@@ -1079,6 +1137,79 @@ class Handler(BaseHTTPRequestHandler):
             limit = min(int(parse_qs(parsed.query).get("limit", ["50"])[0]), 200)
             self._json(event_db.get_manual_scans(limit))
 
+        # ─── Storage management ─────────────────────────────────────────
+
+        # GET /media/stats
+        elif p == "/media/stats":
+            stats = event_db.get_media_stats()
+            # add archive disk usage
+            arc_bytes = 0
+            arc_files = 0
+            for cam_dir in MEDIA_DIR.iterdir() if MEDIA_DIR.exists() else []:
+                arc = cam_dir / "archive"
+                if arc.is_dir():
+                    for f in arc.iterdir():
+                        if f.is_file():
+                            arc_bytes += f.stat().st_size
+                            arc_files += 1
+            stats["archive_bytes"] = arc_bytes
+            stats["archive_files"] = arc_files
+            stats["retention_days"] = ARCHIVE_RETENTION_DAYS
+            self._json(stats)
+
+        # GET /media/archive?camera=&limit=
+        elif p == "/media/archive":
+            cam    = qp("camera")
+            limit  = min(int(qp("limit") or 50), 500)
+            events = event_db.get_recent_events(cam, limit)
+            events = [e for e in events if e.get("archived_clip") or e.get("archived_snap")]
+            self._json({"events": events, "count": len(events)})
+
+        # GET /archived/snap/<event_id>  → serve archived snapshot
+        elif parts[0] == "archived" and len(parts) == 3 and parts[1] == "snap":
+            try:
+                eid = int(parts[2])
+            except ValueError:
+                self._not_found(); return
+            rows = event_db.get_recent_events(limit=1)  # just to reuse conn pattern
+            with __import__("sqlite3").connect(str(event_db.DB_PATH)) as _c:
+                _c.row_factory = __import__("sqlite3").Row
+                row = _c.execute("SELECT archived_snap FROM events WHERE id = ?", (eid,)).fetchone()
+            if not row or not row["archived_snap"]:
+                self._not_found(); return
+            p_file = Path(row["archived_snap"])
+            if not p_file.exists():
+                self._not_found(); return
+            data = p_file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "image/jpeg")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data)
+
+        # GET /archived/clip/<event_id>  → serve archived clip
+        elif parts[0] == "archived" and len(parts) == 3 and parts[1] == "clip":
+            try:
+                eid = int(parts[2])
+            except ValueError:
+                self._not_found(); return
+            with __import__("sqlite3").connect(str(event_db.DB_PATH)) as _c:
+                _c.row_factory = __import__("sqlite3").Row
+                row = _c.execute("SELECT archived_clip FROM events WHERE id = ?", (eid,)).fetchone()
+            if not row or not row["archived_clip"]:
+                self._not_found(); return
+            p_file = Path(row["archived_clip"])
+            if not p_file.exists():
+                self._not_found(); return
+            data = p_file.read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "video/mp4")
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            self.wfile.write(data)
+
         else:
             self._not_found()
 
@@ -1195,6 +1326,37 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"error": "empty query"}); return
             result = query_agent.query(text, camera)
             self._json(result)
+
+        # POST /media/purge  {"days": 14, "dry_run": false}
+        elif p == "/media/purge":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data    = json.loads(body) if body else {}
+                days    = int(data.get("days", ARCHIVE_RETENTION_DAYS))
+                dry_run = bool(data.get("dry_run", False))
+            except Exception:
+                days = ARCHIVE_RETENTION_DAYS; dry_run = False
+            result = _purge_old_media(days=days, dry_run=dry_run)
+            self._json(result)
+
+        # POST /event/<id>/star  {"starred": true}
+        elif parsed.path.startswith("/event/") and parsed.path.endswith("/star"):
+            parts = parsed.path.strip("/").split("/")
+            try:
+                eid = int(parts[1])
+            except (ValueError, IndexError):
+                self._not_found(); return
+            length  = int(self.headers.get("Content-Length", 0))
+            body    = self.rfile.read(length)
+            try:
+                data    = json.loads(body) if body else {}
+                starred = bool(data.get("starred", True))
+            except Exception:
+                starred = True
+            ok = event_db.star_event(eid, starred)
+            self._json({"ok": ok, "event_id": eid, "starred": starred})
+
         else:
             self._not_found()
 
@@ -1293,6 +1455,17 @@ async def main() -> None:
 
     # Start intelligence feeds background refresh
     intel_feeds.start_background_refresh(interval_s=180)
+
+    # ── Auto-purger: clean non-starred archived media older than retention window
+    async def _auto_purge_loop():
+        import asyncio as _aio
+        while True:
+            await _aio.sleep(86400)  # run once per day
+            result = _purge_old_media(days=ARCHIVE_RETENTION_DAYS)
+            if result["purged_events"] > 0:
+                mb = result["bytes_freed"] / 1_048_576
+                print(f"[purge] auto-purged {result['purged_events']} events, freed {mb:.1f} MB", flush=True)
+    asyncio.create_task(_auto_purge_loop())
     print("[watcher] Intel feeds refresh started", flush=True)
 
     # Start FBI wanted persons database (background fetch)
