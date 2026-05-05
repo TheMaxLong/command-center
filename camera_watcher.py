@@ -76,6 +76,33 @@ cameras: dict[str, CameraState] = {}
 # ── Exclusion zones: cam_id → list of normalized {x1,y1,x2,y2} rects ─
 _exclusion_zones: dict[str, list[dict]] = {}
 
+# ── Known zones: same format, but detections are tagged not dropped ──
+_known_zones: dict[str, list[dict]] = {}
+
+
+def _tag_known_zones(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
+    """Tag detections whose center falls in a known zone. Still recorded, alerts suppressed."""
+    zones = _known_zones.get(cam_id)
+    if not zones or not detections or not snap_path:
+        return detections
+    try:
+        from PIL import Image
+        with Image.open(snap_path) as img:
+            iw, ih = img.size
+    except Exception:
+        return detections
+
+    for det in detections:
+        cx, cy = det.get("cx", 0), det.get("cy", 0)
+        nx, ny = cx / iw, cy / ih
+        hit = next(
+            (z for z in zones if z["x1"] <= nx <= z["x2"] and z["y1"] <= ny <= z["y2"]),
+            None
+        )
+        if hit:
+            det["known_zone"] = hit.get("label", "known")
+    return detections
+
 
 def _filter_exclusions(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
     """Drop detections whose center falls inside a configured exclusion zone."""
@@ -179,6 +206,7 @@ def _run_ai_and_store(
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
         detections = _filter_exclusions(cam_id, detections, snap_path)
+        detections = _tag_known_zones(cam_id, detections, snap_path)
 
     # ── Person tracking: Kalman filter + Hungarian assignment (ByteTrack)
     if detections:
@@ -249,8 +277,18 @@ def _run_ai_and_store(
                 except Exception as fe:
                     print(f"[face_intel] error: {fe}", flush=True)
 
-    # Check for stranger alerts
+    # Check for stranger alerts — skip if detection came from a known zone
+    known_zone_pids = {
+        profile_ids[i]
+        for i, d in enumerate(detections[:len(profile_ids)])
+        if d.get("known_zone")
+    }
     for pid in profile_ids:
+        if pid in known_zone_pids:
+            label = profiler.get_profile_label(pid)
+            if not label.startswith("NEIGHBOR"):
+                profiler.set_label(pid, label.replace("REGULAR", "NEIGHBOR").replace("UNKNOWN", "NEIGHBOR"))
+            continue
         if intel_engine.stranger_alert(pid, event_ts, cam_id):
             msg = f"Unknown person on {cam_id.upper()} during off-peak hours"
             event_db.insert_alert("stranger", "warn", msg, cam_id, event_ts)
@@ -1248,6 +1286,10 @@ async def main() -> None:
         if zones:
             _exclusion_zones[cfg["id"]] = zones
             print(f"[exclusion] {cfg['id']}: {len(zones)} zone(s) loaded", flush=True)
+        known = cfg.get("known_zones", [])
+        if known:
+            _known_zones[cfg["id"]] = known
+            print(f"[known] {cfg['id']}: {len(known)} zone(s) loaded — alerts suppressed, profiled as NEIGHBOR", flush=True)
 
     # Start intelligence feeds background refresh
     intel_feeds.start_background_refresh(interval_s=180)

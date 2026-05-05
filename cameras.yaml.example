@@ -26,6 +26,17 @@ cameras:
     #     y1: 0.00         # top edge
     #     x2: 0.75         # right edge
     #     y2: 0.70         # bottom edge
+    #
+    # ── Known zones (optional) ────────────────────────────────────
+    # Detections still recorded + profiled, but alerts are suppressed
+    # and profiles are labeled NEIGHBOR instead of REGULAR/UNKNOWN.
+    # Use for neighbor driveways, shared pathways, street edges, etc.
+    # known_zones:
+    #   - label: "neighbor-east"
+    #     x1: 0.0
+    #     y1: 0.0
+    #     x2: 0.25
+    #     y2: 1.0
 
 
   # ── Tapo D210 Doorbell ─────────────────────────────────────────
