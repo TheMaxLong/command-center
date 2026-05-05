@@ -102,6 +102,11 @@
       padding: 10px 12px 4px;
       text-transform: uppercase;
     }
+    .sb-section-label.ai-label {
+      color: var(--green);
+      letter-spacing: 2px;
+      padding-top: 6px;
+    }
     .city-btn {
       font-family: 'JetBrains Mono', monospace;
       font-size: 9px;
@@ -131,6 +136,50 @@
       display: block;
     }
     .city-btn.active .cb-sub { color: rgba(0,184,217,0.6); }
+    .city-btn.ai-btn {
+      color: var(--text);
+      border-left-color: rgba(0,212,106,0.3);
+      font-size: 9.5px;
+    }
+    .city-btn.ai-btn:hover {
+      color: var(--green);
+      border-left-color: var(--green);
+      background: rgba(0,212,106,0.06);
+    }
+    .city-btn.ai-btn .cb-sub { color: rgba(0,212,106,0.5); }
+    #btn-palantir {
+      color: var(--green);
+      border-left-color: var(--green);
+      background: rgba(0,212,106,0.06);
+      letter-spacing: 2px;
+    }
+    #btn-palantir:hover { background: rgba(0,212,106,0.12); }
+    .feeds-toggle {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8px;
+      letter-spacing: 1.5px;
+      padding: 7px 12px;
+      background: transparent;
+      border: none;
+      border-left: 2px solid transparent;
+      color: var(--dim);
+      cursor: pointer;
+      text-align: left;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.15s;
+    }
+    .feeds-toggle:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+    .feeds-toggle .ft-arrow { transition: transform 0.2s; }
+    .feeds-toggle.open .ft-arrow { transform: rotate(90deg); }
+    #feeds-drawer {
+      overflow: hidden;
+      max-height: 0;
+      transition: max-height 0.25s ease;
+    }
+    #feeds-drawer.open { max-height: 400px; }
     .sb-spacer { flex: 1; }
     .sb-bottom {
       padding: 8px 12px;
@@ -853,81 +902,77 @@
 
   <!-- ── SIDEBAR ── -->
   <div id="sidebar">
-    <div class="sb-heading">PUBLIC FEEDS</div>
 
-    <div class="sb-section-label">CALIFORNIA</div>
-    <button class="city-btn active" id="btn-ps" onclick="switchCity('ps')">
-      PALM SPRINGS
-      <span class="cb-sub">COACHELLA VALLEY</span>
-    </button>
-
-    <div class="sb-section-label">LOS ANGELES</div>
-    <button class="city-btn" id="btn-la-fwy" onclick="switchCity('la-fwy')">
-      FREEWAYS + COAST
-      <span class="cb-sub">I-5 · 101 · MALIBU · VENICE</span>
-    </button>
-    <button class="city-btn" id="btn-la-dt" onclick="switchCity('la-dt')">
-      DOWNTOWN
-      <span class="cb-sub">GRAND PARK · MACARTHUR · CIVIC</span>
-    </button>
-    <button class="city-btn" id="btn-la-skid" onclick="switchCity('la-skid')">
-      SKID ROW
-      <span class="cb-sub">SAN PEDRO · VIGNES · I-110</span>
-    </button>
-
-    <div class="sb-section-label">NATURE</div>
-    <button class="city-btn" id="btn-nature" onclick="switchCity('nature')">
-      NOT HOT GARBAGE
-      <span class="cb-sub">EAGLES · KITTENS · FISH</span>
-    </button>
-
-    <div class="sb-section-label">INTERNATIONAL</div>
-    <button class="city-btn" id="btn-tokyo" onclick="switchCity('tokyo')">
-      TOKYO / OSAKA
-      <span class="cb-sub">SHIBUYA · KABUKICHO · FUJI</span>
-    </button>
-
-    <div class="sb-section-label">NEW YORK</div>
-    <button class="city-btn" id="btn-nyc" onclick="switchCity('nyc')">
-      NEW YORK
-      <span class="cb-sub">TIMES SQ · BRYANT PK · PANDAS</span>
-    </button>
-
-    <div class="sb-section-label">PACIFIC NW</div>
-    <button class="city-btn" id="btn-sea" onclick="switchCity('sea')" style="opacity:0.4;cursor:not-allowed" title="Coming soon">
-      SEATTLE
-      <span class="cb-sub">WSDOT · COMING SOON</span>
-    </button>
-
-    <div class="sb-section-label">AI INTEL</div>
-    <button class="city-btn" onclick="openAIPanel('events')">
+    <div class="sb-section-label ai-label">AI INTEL</div>
+    <button class="city-btn ai-btn" onclick="openAIPanel('events')">
       EVENT LOG
       <span class="cb-sub" id="sb-event-count">LOADING...</span>
     </button>
-    <button class="city-btn" onclick="openAIPanel('trends')">
-      5-WEEK TRENDS
-      <span class="cb-sub">HEATMAP · SCHEDULES</span>
+    <button class="city-btn ai-btn" onclick="openAIPanel('profiles')">
+      PERSONS
+      <span class="cb-sub" id="sb-profile-count">LOADING...</span>
     </button>
-    <button class="city-btn" onclick="openAIPanel('briefing')">
-      INTEL BRIEFING
-      <span class="cb-sub" id="sb-briefing-sub">24H SUMMARY</span>
-    </button>
-    <button class="city-btn" onclick="openAIPanel('alerts')">
+    <button class="city-btn ai-btn" onclick="openAIPanel('alerts')">
       ALERTS
       <span class="cb-sub" id="sb-alert-count">CHECKING...</span>
     </button>
-    <button class="city-btn" onclick="openAIPanel('profiles')">
-      PERSONS
-      <span class="cb-sub" id="sb-profile-count">LOADING...</span>
+    <button class="city-btn ai-btn" onclick="openAIPanel('briefing')">
+      INTEL BRIEFING
+      <span class="cb-sub" id="sb-briefing-sub">24H SUMMARY</span>
+    </button>
+    <button class="city-btn ai-btn" onclick="openAIPanel('trends')">
+      5-WEEK TRENDS
+      <span class="cb-sub">HEATMAP · SCHEDULES</span>
+    </button>
+    <button class="city-btn ai-btn" onclick="window.open('/monitor','_blank')">
+      MONITOR MODE
+      <span class="cb-sub">DEDICATED CAMERA VIEW</span>
     </button>
     <button class="city-btn" id="btn-palantir" onclick="togglePalantir()">
       PALANTIR
       <span class="cb-sub" id="sb-palantir-sub">AI SECURITY AGENT</span>
     </button>
-    <button class="city-btn" onclick="window.open('/monitor','_blank')">
-      MONITOR MODE
-      <span class="cb-sub">DEDICATED CAMERA VIEW</span>
+
+    <button class="feeds-toggle" id="feeds-toggle-btn" onclick="toggleFeeds()">
+      <span>PUBLIC FEEDS &nbsp;<span id="feeds-active-label" style="color:var(--cyan);font-size:7px">PALM SPRINGS</span></span>
+      <span class="ft-arrow">▶</span>
     </button>
+    <div id="feeds-drawer">
+      <div class="sb-section-label">CALIFORNIA</div>
+      <button class="city-btn active" id="btn-ps" onclick="switchCity('ps')">
+        PALM SPRINGS
+        <span class="cb-sub">COACHELLA VALLEY</span>
+      </button>
+      <div class="sb-section-label">LOS ANGELES</div>
+      <button class="city-btn" id="btn-la-fwy" onclick="switchCity('la-fwy')">
+        FREEWAYS + COAST
+        <span class="cb-sub">I-5 · 101 · MALIBU · VENICE</span>
+      </button>
+      <button class="city-btn" id="btn-la-dt" onclick="switchCity('la-dt')">
+        DOWNTOWN
+        <span class="cb-sub">GRAND PARK · MACARTHUR · CIVIC</span>
+      </button>
+      <button class="city-btn" id="btn-la-skid" onclick="switchCity('la-skid')">
+        SKID ROW
+        <span class="cb-sub">SAN PEDRO · VIGNES · I-110</span>
+      </button>
+      <div class="sb-section-label">NATURE</div>
+      <button class="city-btn" id="btn-nature" onclick="switchCity('nature')">
+        NOT HOT GARBAGE
+        <span class="cb-sub">EAGLES · KITTENS · FISH</span>
+      </button>
+      <div class="sb-section-label">INTERNATIONAL</div>
+      <button class="city-btn" id="btn-tokyo" onclick="switchCity('tokyo')">
+        TOKYO / OSAKA
+        <span class="cb-sub">SHIBUYA · KABUKICHO · FUJI</span>
+      </button>
+      <div class="sb-section-label">NEW YORK</div>
+      <button class="city-btn" id="btn-nyc" onclick="switchCity('nyc')">
+        NEW YORK
+        <span class="cb-sub">TIMES SQ · BRYANT PK · PANDAS</span>
+      </button>
+    </div>
+
     <div class="sb-spacer"></div>
     <div class="sb-bottom">
       <div id="sb-source">SRC: CALTRANS D8</div>
@@ -1345,6 +1390,13 @@ let rotTimers    = [null, null, null, null];
 let rotBarStart  = [0, 0, 0, 0];
 
 // ── CITY SWITCHING ───────────────────────────────────────────────
+function toggleFeeds() {
+  const btn = document.getElementById('feeds-toggle-btn');
+  const drawer = document.getElementById('feeds-drawer');
+  btn.classList.toggle('open');
+  drawer.classList.toggle('open');
+}
+
 function switchCity(city) {
   if (city === activeCity) return;
   activeCity = city;
@@ -1353,6 +1405,10 @@ function switchCity(city) {
   document.querySelectorAll('.city-btn').forEach(b => b.classList.remove('active'));
   const btnEl = document.getElementById(`btn-${city}`);
   if (btnEl) btnEl.classList.add('active');
+
+  // Update feeds toggle label
+  const label = document.getElementById('feeds-active-label');
+  if (label && btnEl) label.textContent = btnEl.childNodes[0].textContent.trim();
 
   CAMS = CITIES[city].cams;
 
