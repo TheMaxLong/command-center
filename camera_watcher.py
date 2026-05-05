@@ -73,6 +73,36 @@ class CameraState:
 
 cameras: dict[str, CameraState] = {}
 
+# ── Exclusion zones: cam_id → list of normalized {x1,y1,x2,y2} rects ─
+_exclusion_zones: dict[str, list[dict]] = {}
+
+
+def _filter_exclusions(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
+    """Drop detections whose center falls inside a configured exclusion zone."""
+    zones = _exclusion_zones.get(cam_id)
+    if not zones or not detections or not snap_path:
+        return detections
+    try:
+        from PIL import Image
+        with Image.open(snap_path) as img:
+            iw, ih = img.size
+    except Exception:
+        return detections
+
+    kept = []
+    for det in detections:
+        cx, cy = det.get("cx", 0), det.get("cy", 0)
+        nx, ny = cx / iw, cy / ih
+        hit = next(
+            (z for z in zones if z["x1"] <= nx <= z["x2"] and z["y1"] <= ny <= z["y2"]),
+            None
+        )
+        if hit:
+            print(f"[exclusion] {cam_id}: dropped {det['class']} ({det.get('confidence')}) in zone '{hit.get('label','?')}'", flush=True)
+        else:
+            kept.append(det)
+    return kept
+
 
 # ── Media helpers ─────────────────────────────────────────────────
 
@@ -148,6 +178,7 @@ def _run_ai_and_store(
     detections: list[dict] = []
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
+        detections = _filter_exclusions(cam_id, detections, snap_path)
 
     # ── Person tracking: Kalman filter + Hungarian assignment (ByteTrack)
     if detections:
@@ -1211,6 +1242,12 @@ async def main() -> None:
     event_db.init_db()
     cam_cfgs = load_config()
     print(f"[watcher] Starting with {len(cam_cfgs)} camera(s)", flush=True)
+
+    for cfg in cam_cfgs:
+        zones = cfg.get("exclusion_zones", [])
+        if zones:
+            _exclusion_zones[cfg["id"]] = zones
+            print(f"[exclusion] {cfg['id']}: {len(zones)} zone(s) loaded", flush=True)
 
     # Start intelligence feeds background refresh
     intel_feeds.start_background_refresh(interval_s=180)
