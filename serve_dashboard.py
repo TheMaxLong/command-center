@@ -6,9 +6,11 @@ Serves the static dashboard on port 5000 and proxies:
   /go2rtc/*  → go2rtc on :1984
 """
 import os
+import socket
+import threading
 import urllib.request
 import urllib.error
-from http.server import SimpleHTTPRequestHandler, HTTPServer
+from http.server import SimpleHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 
 DASHBOARD_DIR = Path(__file__).parent / "dashboard"
@@ -25,8 +27,14 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         pass  # suppress per-request logs
 
     def do_GET(self):
+        if (self.headers.get("Upgrade", "").lower() == "websocket"
+                and self.path.startswith("/go2rtc/")):
+            self._proxy_websocket(self.path[7:])
+            return
         if self.path.startswith("/api/"):
             self._proxy(WATCHER_URL, self.path[4:])  # strip /api
+        elif self.path.startswith("/archived/"):
+            self._proxy(WATCHER_URL, self.path)       # archived snap/clip media
         elif self.path.startswith("/go2rtc/"):
             self._proxy(GO2RTC_URL, self.path[7:])   # strip /go2rtc
         elif self.path.rstrip("/") == "/monitor" or self.path.startswith("/monitor?"):
@@ -119,6 +127,41 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(str(e).encode())
 
+    def _proxy_websocket(self, path: str):
+        try:
+            backend = socket.create_connection(("localhost", 1984), timeout=10)
+        except OSError:
+            self.send_response(503); self.end_headers(); return
+
+        request = f"GET {path} HTTP/1.1\r\nHost: localhost:1984\r\n"
+        for key, val in self.headers.items():
+            if key.lower() != "host":
+                request += f"{key}: {val}\r\n"
+        request += "\r\n"
+        backend.sendall(request.encode())
+
+        client = self.connection
+        self.close_connection = True
+
+        def pipe(src, dst):
+            try:
+                while True:
+                    data = src.recv(4096)
+                    if not data:
+                        break
+                    dst.sendall(data)
+            except OSError:
+                pass
+            finally:
+                try: dst.shutdown(socket.SHUT_WR)
+                except OSError: pass
+
+        t = threading.Thread(target=pipe, args=(backend, client), daemon=True)
+        t.start()
+        pipe(client, backend)
+        t.join(timeout=5)
+        backend.close()
+
     def _proxy(self, base_url: str, path: str):
         target = base_url + path
         try:
@@ -146,6 +189,6 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("0.0.0.0", SERVE_PORT), DashboardHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", SERVE_PORT), DashboardHandler)
     print(f"PALM COMMAND dashboard → http://0.0.0.0:{SERVE_PORT}", flush=True)
     server.serve_forever()

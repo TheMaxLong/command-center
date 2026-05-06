@@ -287,7 +287,7 @@
 <script>
 const params   = new URLSearchParams(location.search);
 let activeCam  = params.get('cam') || 'doorbell';
-let activeMode = 'snap';   // snap | ann | go2rtc
+let activeMode = params.get('mode') || 'ann';   // snap | ann | go2rtc
 let refreshMs  = 2000;
 let refreshTimer = null;
 let uptimeStart  = Date.now();
@@ -310,6 +310,8 @@ setInterval(tick, 1000); tick();
 // ── Camera / Mode switching ───────────────────────────────────────
 function switchCamera(camId) {
   activeCam = camId;
+  activeMode = 'ann';
+  syncModeButtons();
   document.getElementById('feed-go2rtc').src = '';
   startFeed();
   refreshStatus();
@@ -318,10 +320,19 @@ function switchCamera(camId) {
 
 function setMode(mode) {
   activeMode = mode;
+  syncModeButtons();
+  startFeed();
+}
+
+function syncModeButtons() {
   ['snap','ann','rtc'].forEach(m => document.getElementById('mode-' + m).classList.remove('active'));
   const map = {snap:'mode-snap', ann:'mode-ann', go2rtc:'mode-rtc'};
-  document.getElementById(map[mode] || 'mode-snap').classList.add('active');
-  startFeed();
+  document.getElementById(map[activeMode] || 'mode-snap').classList.add('active');
+  document.getElementById('cam-select').value = activeCam;
+  const url = new URL(location.href);
+  url.searchParams.set('cam', activeCam);
+  url.searchParams.set('mode', activeMode);
+  history.replaceState(null, '', url);
 }
 
 function startFeed() {
@@ -563,6 +574,7 @@ async function loadEvents() {
 
 // ── Init ──────────────────────────────────────────────────────────
 document.getElementById('cam-select').value = activeCam;
+syncModeButtons();
 startFeed();
 refreshStatus();
 loadEvents();

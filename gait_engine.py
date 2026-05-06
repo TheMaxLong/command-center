@@ -63,6 +63,13 @@ _KP = {
     "l_knee": 13, "r_knee": 14, "l_ankle": 15, "r_ankle": 16,
 }
 
+_KP_NAMES = [
+    "nose", "l_eye", "r_eye", "l_ear", "r_ear",
+    "l_shoulder", "r_shoulder", "l_elbow", "r_elbow",
+    "l_wrist", "r_wrist", "l_hip", "r_hip",
+    "l_knee", "r_knee", "l_ankle", "r_ankle",
+]
+
 
 def _kp(kps: np.ndarray, name: str) -> Optional[tuple[float, float]]:
     """Get (x, y) of a named keypoint, or None if confidence too low."""
@@ -99,6 +106,103 @@ def _angle_deg(a: Optional[tuple], b: Optional[tuple],
         return None
     cos_a = max(-1, min(1, dot / (mag_ba * mag_bc)))
     return math.degrees(math.acos(cos_a))
+
+
+def _pose_landmarks(kps: np.ndarray, frame_w: float, frame_h: float) -> list[dict]:
+    """Compact serializable landmark set for API/UI overlays."""
+    points: list[dict] = []
+    fw = frame_w or 1.0
+    fh = frame_h or 1.0
+    for idx, name in enumerate(_KP_NAMES):
+        if idx >= len(kps):
+            continue
+        x, y, conf = kps[idx]
+        conf_f = float(conf)
+        if conf_f < 0.20:
+            continue
+        points.append({
+            "name": name,
+            "x": round(float(x), 1),
+            "y": round(float(y), 1),
+            "nx": round(float(x) / fw, 4),
+            "ny": round(float(y) / fh, 4),
+            "confidence": round(conf_f, 3),
+        })
+    return points
+
+
+def _pose_summary(kps: np.ndarray) -> dict:
+    """Operator-facing pose tags. Heuristic, not biometric certainty."""
+    nose       = _kp(kps, "nose")
+    l_shoulder = _kp(kps, "l_shoulder")
+    r_shoulder = _kp(kps, "r_shoulder")
+    l_wrist    = _kp(kps, "l_wrist")
+    r_wrist    = _kp(kps, "r_wrist")
+    l_hip      = _kp(kps, "l_hip")
+    r_hip      = _kp(kps, "r_hip")
+    l_knee     = _kp(kps, "l_knee")
+    r_knee     = _kp(kps, "r_knee")
+    l_ankle    = _kp(kps, "l_ankle")
+    r_ankle    = _kp(kps, "r_ankle")
+
+    shoulder_mid = _midpoint(l_shoulder, r_shoulder)
+    hip_mid      = _midpoint(l_hip, r_hip)
+    knee_mid     = _midpoint(l_knee, r_knee)
+    ankle_mid    = _midpoint(l_ankle, r_ankle)
+
+    visible = sum(1 for i in range(min(len(kps), 17)) if float(kps[i][2]) >= 0.30)
+    tags: list[str] = []
+    posture = "unknown"
+
+    if shoulder_mid and hip_mid:
+        torso_dx = shoulder_mid[0] - hip_mid[0]
+        torso_dy = abs(shoulder_mid[1] - hip_mid[1]) or 1.0
+        lean = torso_dx / torso_dy
+        if abs(lean) > 0.45:
+            posture = "leaning"
+            tags.append("torso lean")
+        else:
+            posture = "upright"
+
+    if hip_mid and ankle_mid and shoulder_mid:
+        body_h = max(abs(ankle_mid[1] - shoulder_mid[1]), 1.0)
+        hip_drop = abs(ankle_mid[1] - hip_mid[1]) / body_h
+        if hip_drop < 0.42:
+            posture = "crouched"
+            tags.append("low stance")
+
+    if knee_mid and hip_mid and shoulder_mid:
+        if knee_mid[1] < hip_mid[1] + abs(hip_mid[1] - shoulder_mid[1]) * 0.35:
+            posture = "bending"
+            tags.append("bending")
+
+    arms_up = False
+    if shoulder_mid:
+        raised = []
+        if l_wrist and l_wrist[1] < shoulder_mid[1]:
+            raised.append("left")
+        if r_wrist and r_wrist[1] < shoulder_mid[1]:
+            raised.append("right")
+        if raised:
+            arms_up = True
+            tags.append("hands raised" if len(raised) == 2 else f"{raised[0]} hand raised")
+
+    if l_ankle and r_ankle and l_shoulder and r_shoulder:
+        shoulder_w = _dist(l_shoulder, r_shoulder) or 1.0
+        step_width = abs(l_ankle[0] - r_ankle[0]) / shoulder_w
+        if step_width > 0.65:
+            tags.append("wide stance")
+
+    if not tags and posture != "unknown":
+        tags.append(posture)
+
+    return {
+        "status": posture,
+        "tags": tags[:4],
+        "arms_up": arms_up,
+        "visible_points": visible,
+        "quality": round(visible / 17.0, 2),
+    }
 
 
 # ── Gait feature extraction ───────────────────────────────────────
@@ -382,6 +486,7 @@ class GaitEngine:
             return detections
 
         kps_all = result.keypoints.data.cpu().numpy()  # shape [N, 17, 3]
+        frame_h, frame_w = result.orig_shape if getattr(result, "orig_shape", None) else (1, 1)
 
         # Match each pose to a tracked person detection by bbox IoU
         for det_idx, det in enumerate(detections):
@@ -416,10 +521,15 @@ class GaitEngine:
 
             kps   = kps_all[best_pose_idx]  # [17, 3]
             feats = _compute_gait_features(kps)
-            if feats is None:
-                continue
+            pose_summary = _pose_summary(kps)
+            pose_landmarks = _pose_landmarks(kps, float(frame_w), float(frame_h))
 
             # Update track accumulator
+            gait_id = None
+            gait_label = None
+            gait_conf = 0.0
+            gait_stable = False
+            gait_frames = 0
             with self._lock:
                 if track_id not in self._tracks:
                     if len(self._tracks) > self.MAX_TRACKS:
@@ -429,42 +539,45 @@ class GaitEngine:
                     self._tracks[track_id] = GaitTrack(track_id)
 
                 gtrack = self._tracks[track_id]
-                gtrack.add_frame(feats, ts)
+                if feats is not None:
+                    gtrack.add_frame(feats, ts)
 
-                gait_id    = None
-                gait_label = None
-                gait_conf  = 0.0
-
-                if gtrack.stable:
-                    sig   = gtrack.signature
-                    match = self._match_profile(sig)
-                    if match:
-                        match.update(sig, camera_id)
-                        gait_id    = match.id
-                        gait_label = match.label or f"GAIT-{match.id:03d}"
-                        gait_conf  = match.similarity(sig)
-                    else:
-                        # Create new gait profile
-                        prof = GaitProfile(
-                            gait_id   = self._next_id,
-                            signature = sig,
-                            person_profile_id = det.get("profile_id"),
-                        )
-                        prof.cameras.append(camera_id)
-                        self._profiles.append(prof)
-                        gait_id    = self._next_id
-                        gait_label = f"GAIT-{self._next_id:03d}"
-                        gait_conf  = 1.0
-                        self._next_id += 1
-                        print(f"[gait] New gait profile: {gait_label} on {camera_id}", flush=True)
+                    if gtrack.stable:
+                        sig   = gtrack.signature
+                        match = self._match_profile(sig)
+                        if match:
+                            match.update(sig, camera_id)
+                            gait_id    = match.id
+                            gait_label = match.label or f"GAIT-{match.id:03d}"
+                            gait_conf  = match.similarity(sig)
+                        else:
+                            # Create new gait profile
+                            prof = GaitProfile(
+                                gait_id   = self._next_id,
+                                signature = sig,
+                                person_profile_id = det.get("profile_id"),
+                            )
+                            prof.cameras.append(camera_id)
+                            self._profiles.append(prof)
+                            gait_id    = self._next_id
+                            gait_label = f"GAIT-{self._next_id:03d}"
+                            gait_conf  = 1.0
+                            self._next_id += 1
+                            print(f"[gait] New gait profile: {gait_label} on {camera_id}", flush=True)
+                gait_stable = gtrack.stable
+                gait_frames = gtrack.frame_count
 
             enriched[det_idx] = {
                 **det,
+                "pose": pose_summary,
+                "pose_status": pose_summary.get("status"),
+                "pose_tags": pose_summary.get("tags", []),
+                "pose_landmarks": pose_landmarks,
                 "gait_id":    gait_id,
                 "gait_label": gait_label,
                 "gait_conf":  round(gait_conf, 3),
-                "gait_stable": gtrack.stable,
-                "gait_frames": gtrack.frame_count,
+                "gait_stable": gait_stable,
+                "gait_frames": gait_frames,
             }
 
         return enriched

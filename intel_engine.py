@@ -122,6 +122,9 @@ def stranger_alert(profile_id: int, event_ts: float, cam_id: str) -> bool:
 
     label = profiler_mod.get_profile_label(profile_id)
     is_regular = label.startswith("REGULAR")
+    is_operator_cleared = label.startswith(("TRUSTED", "IGNORE", "BACKGROUND"))
+    if is_operator_cleared:
+        return False   # operator-classified profile, not a stranger alert
     if is_regular:
         return False   # known person — not an alert
 

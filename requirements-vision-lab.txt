@@ -1,0 +1,8 @@
+# Optional lab stack. Keep this out of the main live watcher image until
+# package wheels are confirmed on the target hardware.
+#
+# Install in a separate venv/container for experiments:
+#   python -m pip install -r requirements-vision-lab.txt
+
+supervision>=0.25
+norfair>=2.3

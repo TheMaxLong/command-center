@@ -15,6 +15,28 @@ cameras:
     source_name:      front_cam       # must match the stream name in go2rtc.yaml
     go2rtc_url:       "http://go2rtc:1984"  # service name inside Docker
     ai_interval:      10              # seconds between AI frames
+    # ── Exclusion zones (optional) ────────────────────────────────
+    # Normalized coords 0.0–1.0 (fraction of frame). Detections whose
+    # center falls inside a zone are silently dropped before profiling.
+    # To find coords: open /api/snap/front_cam, note pixel position of
+    # the area, divide x by image width and y by image height.
+    # exclusion_zones:
+    #   - label: "tree"    # human label shown in logs
+    #     x1: 0.30         # left edge
+    #     y1: 0.00         # top edge
+    #     x2: 0.75         # right edge
+    #     y2: 0.70         # bottom edge
+    #
+    # ── Known zones (optional) ────────────────────────────────────
+    # Detections still recorded + profiled, but alerts are suppressed
+    # and profiles are labeled NEIGHBOR instead of REGULAR/UNKNOWN.
+    # Use for neighbor driveways, shared pathways, street edges, etc.
+    # known_zones:
+    #   - label: "neighbor-east"
+    #     x1: 0.0
+    #     y1: 0.0
+    #     x2: 0.25
+    #     y2: 1.0
 
 
   # ── Tapo D210 Doorbell ─────────────────────────────────────────
