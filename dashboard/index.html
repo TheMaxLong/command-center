@@ -1083,6 +1083,45 @@
       gap: 14px;
       align-items: start;
     }
+    .gait-card {
+      border: 1px solid var(--border2);
+      background: rgba(255,255,255,0.018);
+      border-radius: 3px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+    }
+    .gait-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .gait-id {
+      font-size: 9px;
+      color: var(--cyan);
+      letter-spacing: 2px;
+      font-weight: 700;
+    }
+    .gait-sig-bar {
+      height: 2px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 1px;
+      margin-bottom: 7px;
+      overflow: hidden;
+    }
+    .gait-sig-fill {
+      height: 100%;
+      border-radius: 1px;
+      transition: width 0.4s ease;
+    }
+    .gait-card-meta {
+      display: flex;
+      gap: 14px;
+      font-size: 7px;
+      color: var(--dim);
+      letter-spacing: 1.2px;
+      flex-wrap: wrap;
+    }
     .ops-section {
       border: 1px solid var(--border2);
       background: rgba(255,255,255,0.018);
@@ -1606,6 +1645,7 @@
     <button class="ai-tab"        id="tab-briefing" onclick="switchAITab('briefing')">BRIEFING</button>
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
+    <button class="ai-tab"        id="tab-gait"     onclick="switchAITab('gait')">GAIT BIO</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -2508,6 +2548,7 @@ function switchAITab(tab) {
   else if (tab === 'briefing') loadBriefing();
   else if (tab === 'alerts')   loadAlerts();
   else if (tab === 'storage')  loadStorage();
+  else if (tab === 'gait')     loadGait();
 }
 
 async function loadProfiles() {
@@ -3580,6 +3621,114 @@ async function loadStorageStats() {
 }
 setInterval(loadStorageStats, 30000);
 loadStorageStats();
+
+// ── GAIT BIOMETRICS ──────────────────────────────────────────────
+async function loadGait() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING GAIT DATABASE...</div>';
+  try {
+    const [gaitRes, profilesRes] = await Promise.all([
+      fetch('/api/feeds/gait'),
+      fetch('/api/profiles').catch(() => ({ json: () => [] }))
+    ]);
+    const { profiles: gaits = [], count = 0 } = await gaitRes.json();
+    const persons = await profilesRes.json().catch(() => []);
+
+    const now    = Date.now() / 1000;
+    const day    = 86400;
+    const active = gaits.filter(g => g.last_seen && (now - g.last_seen) < day).length;
+    const linked = gaits.filter(g => g.person_profile_id).length;
+    const avgSightings = gaits.length
+      ? (gaits.reduce((s, g) => s + (g.sightings || 0), 0) / gaits.length).toFixed(1)
+      : 0;
+
+    let html = `
+      <div class="ops-kpis" style="margin-bottom:14px;">
+        <div class="ops-kpi"><div class="ops-kpi-val">${count}</div><div class="ops-kpi-label">SIGNATURES</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--green)">${active}</div><div class="ops-kpi-label">ACTIVE 24H</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--cyan)">${linked}</div><div class="ops-kpi-label">PERSON LINKED</div></div>
+        <div class="ops-kpi"><div class="ops-kpi-val">${avgSightings}</div><div class="ops-kpi-label">AVG SIGHTINGS</div></div>
+      </div>
+      <div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:14px;">
+        GAIT BIOMETRIC DATABASE · MATCH ≥0.88 · STRONG ≥0.94 · 18-DIM COSINE
+      </div>`;
+
+    if (!gaits.length) {
+      html += '<div style="color:var(--dim);padding:20px;font-size:9px;letter-spacing:1px;">NO GAIT SIGNATURES YET — persons tracked over multiple frames build biometric profiles automatically</div>';
+      body.innerHTML = html;
+      return;
+    }
+
+    const sorted = [...gaits].sort((a, b) => (b.sightings || 0) - (a.sightings || 0));
+
+    html += sorted.map(g => {
+      const label      = String(g.label || `GAIT-${String(g.id).padStart(3,'0')}`).toUpperCase();
+      const sightings  = g.sightings || 0;
+      const cams       = Array.isArray(g.cameras) ? g.cameras : [];
+      const lastSeenAgo = g.last_seen ? _timeAgo(g.last_seen) : 'UNKNOWN';
+      const firstSeen  = g.first_seen ? new Date(g.first_seen * 1000).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+      const sigNorm    = typeof g.signature_norm === 'number' ? g.signature_norm : 0;
+      const sigPct     = Math.min(100, Math.round((sigNorm / 5) * 100));
+      const isLinked   = !!g.person_profile_id;
+      const personLabel = isLinked
+        ? (persons.find(p => p.id === g.person_profile_id)?.label || `PROFILE-${String(g.person_profile_id).padStart(3,'0')}`)
+        : null;
+      const isRecent   = g.last_seen && (now - g.last_seen) < day;
+      const statusColor = isRecent ? 'var(--green)' : sightings > 5 ? 'var(--yellow)' : 'var(--dim)';
+
+      return `<div class="gait-card" data-gait-id="${g.id}">
+        <div class="gait-card-head">
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="gait-id">${label}</span>
+            ${isLinked ? `<span class="identity-badge face">⟶ ${String(personLabel).toUpperCase()}</span>` : ''}
+            ${isRecent ? '<span class="identity-badge trusted">ACTIVE</span>' : ''}
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span style="font-size:9px;color:var(--dim);letter-spacing:1px;">${sightings} OBS</span>
+            <button class="ops-link" onclick="labelGaitProfile(${g.id}, '${label}')">LABEL</button>
+          </div>
+        </div>
+        <div class="gait-sig-bar">
+          <div class="gait-sig-fill" style="width:${sigPct}%;background:${statusColor};"></div>
+        </div>
+        <div class="gait-card-meta">
+          <span>FIRST: ${firstSeen}</span>
+          <span>LAST: ${lastSeenAgo}</span>
+          <span>CAMS: ${cams.length ? cams.map(c=>String(c).toUpperCase()).join(' · ') : '—'}</span>
+          <span style="color:var(--dim)">SIG ${sigNorm.toFixed(2)}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    body.innerHTML = html;
+  } catch(e) {
+    document.getElementById('ai-body').innerHTML =
+      '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">GAIT ENGINE OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+function _timeAgo(ts) {
+  const s = Math.floor(Date.now() / 1000 - ts);
+  if (s < 60)   return `${s}S AGO`;
+  if (s < 3600) return `${Math.floor(s/60)}M AGO`;
+  if (s < 86400) return `${Math.floor(s/3600)}H AGO`;
+  return `${Math.floor(s/86400)}D AGO`;
+}
+
+async function labelGaitProfile(gaitId, currentLabel) {
+  const newLabel = prompt(`Rename gait profile (current: ${currentLabel})`, currentLabel);
+  if (!newLabel || newLabel === currentLabel) return;
+  try {
+    await fetch(`/api/gait/label/${gaitId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: newLabel.toUpperCase() })
+    });
+    loadGait();
+  } catch { alert('Label update failed — check watcher connection'); }
+}
+
+setInterval(() => { if (aiCurrentTab === 'gait') loadGait(); }, 30000);
 
 async function refreshVelocity() {
   try {

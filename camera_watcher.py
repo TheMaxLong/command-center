@@ -1669,6 +1669,23 @@ class Handler(BaseHTTPRequestHandler):
             result["timestamp"] = ts
             self._json(result)
 
+        # POST /gait/label/<id>  {"label": "..."}
+        elif parts[0] in ("gait", "api") and "gait" in parts and "label" in parts:
+            try:
+                gait_id = int(parts[parts.index("label") - 1])
+            except (ValueError, IndexError):
+                self._not_found(); return
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                data  = json.loads(self.rfile.read(length))
+                label = str(data.get("label", "")).strip()[:48].upper()
+            except Exception:
+                self.send_response(400); self.end_headers(); return
+            if not label:
+                self._json({"ok": False, "error": "no label"}); return
+            ok = gait_engine.label_gait_profile(gait_id, label)
+            self._json({"ok": ok, "gait_id": gait_id, "label": label})
+
         # POST /watchlist/add  {"plate": "...", "label": "..."}
         elif p == "/watchlist/add":
             length = int(self.headers.get("Content-Length", 0))

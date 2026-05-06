@@ -683,3 +683,12 @@ def get_gait_profiles():
 
 def analyze_gait(track_id: int):
     return get_engine().analyze_gait_features(track_id)
+
+def label_gait_profile(gait_id: int, label: str) -> bool:
+    eng = get_engine()
+    with eng._lock:
+        for prof in eng._profiles:
+            if prof.id == gait_id:
+                prof.label = label.upper()
+                return True
+    return False
