@@ -29,7 +29,9 @@ from __future__ import annotations
 import os
 import re
 import time
+import json
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 from typing import Optional
 
 import event_db
@@ -45,6 +47,42 @@ def _get_feeds():
         return _if
     except Exception:
         return None
+
+
+def _scene_zones() -> dict:
+    scene_file = os.environ.get("SCENE_ZONES_FILE")
+    data_path = Path(scene_file) if scene_file else Path(os.environ.get("FACE_CACHE_DIR", "/data/face_intel")).parent / "scene_zones.json"
+    fallback = {
+        "attention_zones": {
+            "front_cam": [{
+                "label": "parking lot",
+                "x1": 0.0, "y1": 0.0, "x2": 0.46, "y2": 1.0,
+                "priority": "high",
+                "note": "Left side of frame; operator focus area.",
+            }]
+        }
+    }
+    try:
+        if data_path.exists():
+            loaded = json.loads(data_path.read_text())
+            return loaded if isinstance(loaded, dict) else fallback
+    except Exception:
+        pass
+    return fallback
+
+
+def _format_focus_zones(camera_id: Optional[str] = None) -> str:
+    zones_by_cam = _scene_zones().get("attention_zones") or {}
+    if camera_id:
+        zones_by_cam = {camera_id: zones_by_cam.get(camera_id, [])}
+    lines = []
+    for cam, zones in zones_by_cam.items():
+        for z in zones:
+            label = str(z.get("label", "focus")).upper()
+            priority = str(z.get("priority", "normal")).upper()
+            note = z.get("note") or ""
+            lines.append(f"  ◉ {cam.upper()} · {label} · {priority} priority" + (f" · {note}" if note else ""))
+    return "\n".join(lines)
 
 # ── Optional LLM backend ──────────────────────────────────────────
 _LLM_CLIENT   = None
@@ -211,6 +249,8 @@ _INTENT_PATTERNS: list[tuple[str, list[str]]] = [
     ("anomaly_check",  ["unusual", "anomaly", "anomalies", "weird", "abnormal", "suspicious", "odd"]),
     ("velocity",       ["trend", "increasing", "decreasing", "more activity", "velocity", "getting busier"]),
     ("camera_compare", ["which camera", "busiest cam", "most active camera", "camera comparison"]),
+    ("focus_zones",    ["focus", "attention", "watch area", "parking lot", "zone", "scene memory",
+                        "where should", "where to look", "left side"]),
     ("count_query",    ["how many", "count", "number of", "total events", "total people"]),
     ("time_query",     ["at 12", "at 1", "at 2", "at 3", "at 4", "at 5", "at 6", "at 7", "at 8",
                         "at 9", "at 10", "at 11", "overnight", "midnight", "noon", "morning",
@@ -336,6 +376,7 @@ def _handle_summary(text: str, camera_id: Optional[str]) -> dict:
         f"Persons: {len(profiles)} ({n_reg} regulars, {n_unk} unknowns)\n"
         f"Velocity trend: {vel['trend']} ({vel['delta_pct']:+.1f}%)\n"
         f"Anomalies: {len(anom)}\n"
+        f"Attention zones:\n{_format_focus_zones(camera_id)}\n"
         f"Profiles: {chr(10).join(p['label'] for p in profiles[:5])}"
     )
     llm_resp = _llm_query(text, context)
@@ -350,6 +391,9 @@ def _handle_summary(text: str, camera_id: Optional[str]) -> dict:
         lines.append(f"▸ Activity trend {arrow} {vel['delta_pct']:+.1f}% vs last week.")
     if anom:
         lines.append(f"▸ {len(anom)} statistical anomaly spike(s) detected in baseline.")
+    focus = _format_focus_zones(camera_id)
+    if focus:
+        lines.append("▸ Operator focus zones active:\n" + focus)
     if not recent:
         lines = ["▸ No activity in the last 24 hours. All quiet."]
     return {"intent": "summary", "answer": "\n".join(lines), "data": {"events": len(recent), "profiles": profiles}}
@@ -439,6 +483,29 @@ def _handle_count(text: str, camera_id: Optional[str]) -> dict:
     ctx = f"Events: {len(events)}, persons: {len(profiles)}"
     llm = _llm_query(text, ctx)
     return {"intent": "count_query", "answer": llm or answer, "data": {"event_count": len(events), "person_count": len(profiles)}}
+
+
+def _handle_focus_zones(text: str, camera_id: Optional[str]) -> dict:
+    t = text.lower()
+    cam = camera_id
+    if not cam:
+        if "front" in t:
+            cam = "front_cam"
+        elif "doorbell" in t or "bell" in t:
+            cam = "doorbell"
+    zones_text = _format_focus_zones(cam)
+    if not zones_text:
+        target = cam.upper() if cam else "ANY CAMERA"
+        answer = f"▸ No operator attention zones are configured for {target} yet."
+    else:
+        scope = cam.upper() if cam else "configured cameras"
+        answer = (
+            f"▸ Attention guidance for {scope}:\n"
+            f"{zones_text}\n"
+            "▸ I will treat detections in these regions as higher-priority context during briefings."
+        )
+    llm = _llm_query(text, zones_text)
+    return {"intent": "focus_zones", "answer": llm or answer, "data": _scene_zones()}
 
 
 def _handle_time_query(text: str, camera_id: Optional[str]) -> dict:
@@ -1141,6 +1208,7 @@ def query(
         "anomaly_check":  _handle_anomaly,
         "velocity":       _handle_velocity,
         "camera_compare": _handle_camera_compare,
+        "focus_zones":    _handle_focus_zones,
         "count_query":    _handle_count,
         "time_query":     _handle_time_query,
         "recent_events":  _handle_recent,
