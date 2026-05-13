@@ -1406,6 +1406,10 @@
         NOT HOT GARBAGE
         <span class="cb-sub">EAGLES · KITTENS · FISH</span>
       </button>
+      <button class="city-btn" id="btn-wildlife" onclick="switchCity('wildlife')">
+        WILDLIFE · LIVE EARTH
+        <span class="cb-sub">BEARS · AFRICA · OSPREY · SALMON</span>
+      </button>
       <div class="sb-section-label">INTERNATIONAL</div>
       <button class="city-btn" id="btn-tokyo" onclick="switchCity('tokyo')">
         TOKYO / OSAKA
@@ -1758,6 +1762,32 @@ const CITIES = {
       { id: 'i10-sanpedro', label: 'I-10 · GRIFFITH / SAN PEDRO', loc: 'San Pedro St · Skid Row S edge', stream: 'https://wzmedia.dot.ca.gov/D7/CCTV-125.stream/playlist.m3u8' },
       { id: 'i110-1st',     label: 'I-110 · 1ST ST',              loc: 'Grand Park / N of Skid Row',     stream: 'https://wzmedia.dot.ca.gov/D7/CCTV-188.stream/playlist.m3u8' },
       { id: 'i110-7th',     label: 'I-110 · 7TH ST',              loc: 'South Park · W of Skid Row',     stream: 'https://wzmedia.dot.ca.gov/D7/CCTV-185.stream/playlist.m3u8' },
+    ],
+  },
+  wildlife: {
+    name:   'WILDLIFE · LIVE EARTH',
+    source: 'EXPLORE.ORG · AFRICAM · YOUTUBE LIVE · HDONTAP',
+    footer: 'WILDLIFE: ALASKA BEARS · AFRICA · PACIFIC NORTHWEST · EAGLES',
+    type:   'angelcam',
+    cams: [
+      // Alaska Bears
+      { id: 'brooks-falls',     label: 'BROOKS FALLS · BEARS',     loc: 'Katmai NP · Alaska · Falls Cam',        embed: 'https://www.youtube.com/embed/73-EekdVVU8?autoplay=1&mute=1&rel=0' },
+      { id: 'katmai-river',     label: 'KATMAI · RIVER WATCH',     loc: 'Katmai NP · Alaska · Brooks River',     embed: 'https://www.youtube.com/embed/-W_CTboaB4A?autoplay=1&mute=1&rel=0' },
+      { id: 'katmai-lower',     label: 'KATMAI · LOWER RIVER',     loc: 'Katmai NP · Alaska · Naknek Lake',      embed: 'https://www.youtube.com/embed/vZ1e_m8Tl04?autoplay=1&mute=1&rel=0' },
+      { id: 'kodiak-bears',     label: 'KODIAK · BROWN BEARS',     loc: 'Kodiak NWR · Alaska · Frazer Lake',     embed: 'https://hdontap.com/index.php/video/embed/710132' },
+      { id: 'walrus-island',    label: 'WALRUS · ROUND ISLAND',    loc: 'Round Island · Alaska · ADF&G',         embed: 'https://www.youtube.com/embed/OjA36WMaGq4?autoplay=1&mute=1&rel=0' },
+      // Africa
+      { id: 'wild-africa',      label: 'WILD AFRICA · TEMBE',      loc: 'Tembe Elephant Park · South Africa',    embed: 'https://www.youtube.com/embed/vr4o_AsrU1k?autoplay=1&mute=1&rel=0' },
+      { id: 'mpala-watering',   label: 'MPALA · WATERING HOLE',    loc: 'Laikipia County · Kenya',               embed: 'https://www.youtube.com/embed/oORXfTviuCs?autoplay=1&mute=1&rel=0' },
+      { id: 'mpala-river',      label: 'MPALA · RIVER WILDLIFE',   loc: 'Mpala Research Centre · Kenya',         embed: 'https://www.youtube.com/embed/2swy9gysvOY?autoplay=1&mute=1&rel=0' },
+      { id: 'mpala-lookout',    label: 'MPALA · LOOKOUT CAM',      loc: 'Mpala Research Centre · Kenya',         embed: 'https://www.youtube.com/embed/O8xVFhgEv6Q?autoplay=1&mute=1&rel=0' },
+      // Eagles
+      { id: 'decorah-north',    label: 'DECORAH · EAGLE NEST',     loc: 'Decorah Iowa · North Nest · 4K',        embed: 'https://www.youtube.com/embed/GGIE1E-kaMQ?autoplay=1&mute=1&rel=0' },
+      // Pacific Northwest
+      { id: 'issaquah-salmon',  label: 'ISSAQUAH · SALMON CAM',    loc: 'Issaquah WA · Salmon Hatchery',         embed: 'https://www.youtube.com/embed/8bSpYgrQIfA?autoplay=1&mute=1&rel=0' },
+      { id: 'hood-canal-fish',  label: 'HOOD CANAL · FISH CAM',    loc: 'Hood Canal WA · Steelhead · LLTK',      embed: 'https://www.youtube.com/embed/5DJPaaCXHlQ?autoplay=1&mute=1&rel=0' },
+      { id: 'seaside-osprey',   label: 'SEASIDE · OSPREY NEST',    loc: 'Seaside OR · Neawanna Creek',           embed: 'https://www.youtube.com/embed/bF_l_-gptb4?autoplay=1&mute=1&rel=0' },
+      { id: 'ridgefield-osprey',label: 'RIDGEFIELD · OSPREY',      loc: 'Ridgefield WA · Columbia River',        embed: 'https://www.youtube.com/embed/POZ1CVXbYek?autoplay=1&mute=1&rel=0' },
     ],
   },
   nature: {
