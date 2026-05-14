@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download YOLO weights so the first motion/pose event isn't slow
-RUN python -c "from ultralytics import YOLO; YOLO('yolov8n.pt'); YOLO('yolov8n-pose.pt')"
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8s.pt'); YOLO('yolov8n.pt'); YOLO('yolov8n-pose.pt')"
 
 COPY *.py .
 

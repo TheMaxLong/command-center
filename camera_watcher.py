@@ -47,6 +47,7 @@ import forward_intel
 import notifier
 import evidence_export
 import vision_tools
+import drone_ops
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
@@ -1393,6 +1394,10 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/intel/behavior":
             self._json({"briefing": forward_intel.behavior_briefing()})
 
+        # ─── Drone operations planner ─────────────────────────────────
+        elif p == "/drone/status":
+            self._json(drone_ops.status())
+
         elif parsed.path.startswith("/intel/classify/"):
             eid = parsed.path.split("/intel/classify/", 1)[1].rstrip("/")
             if not eid or len(eid) > 64 or not all(c.isalnum() or c in "-_" for c in eid):
@@ -1752,6 +1757,30 @@ class Handler(BaseHTTPRequestHandler):
                 dry_run = True
             result = _orphaned_archive_media(dry_run=dry_run)
             self._json({"ok": True, **result})
+
+        # POST /drone/mission  {"kind": "perimeter|recon|incident", "notes": "..."}
+        elif p == "/drone/mission":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            kind = str(data.get("kind") or "perimeter").strip().lower()
+            operator = str(data.get("operator") or "dashboard").strip()
+            notes = str(data.get("notes") or "").strip()
+            self._json(drone_ops.start_mission(kind, operator=operator, notes=notes))
+
+        # POST /drone/abort  {"reason": "..."}
+        elif p == "/drone/abort":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            self._json(drone_ops.abort_mission(str(data.get("reason") or "operator abort")))
+
 
         # POST /api/backfill/<cam_id|all>  {"hours": 24}
         elif ((parsed.path.startswith("/api/backfill/") and not parsed.path.startswith("/api/backfill/status"))

@@ -1255,6 +1255,40 @@
       letter-spacing: 0.7px;
     }
     .ops-log-line span:first-child { color: var(--text); }
+    .drone-route {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .drone-waypoint {
+      border: 1px solid var(--border2);
+      background: rgba(0,0,0,0.22);
+      border-radius: 3px;
+      padding: 7px;
+      font-size: 7px;
+      color: var(--text);
+      letter-spacing: 1px;
+      text-align: center;
+      min-height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .drone-progress {
+      height: 7px;
+      background: rgba(0,0,0,0.42);
+      border: 1px solid var(--border2);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 8px 0 4px;
+    }
+    .drone-progress > div {
+      height: 100%;
+      background: linear-gradient(90deg, var(--green), var(--cyan));
+      width: 0%;
+      transition: width 0.25s ease;
+    }
 
     /* PALANTIR sidebar button glow when open */
     .city-btn.palantir-active {
@@ -1360,6 +1394,10 @@
     <button class="city-btn ai-btn" onclick="openAIPanel('ops')">
       OPERATIONS
       <span class="cb-sub" id="sb-ops-sub">TIMELINE · GRAPH · SOURCES</span>
+    </button>
+    <button class="city-btn ai-btn" onclick="openAIPanel('drone')">
+      DRONE OPS
+      <span class="cb-sub" id="sb-drone-sub">PERIMETER · RECON</span>
     </button>
     <button class="city-btn ai-btn" onclick="openAIPanel('trends')">
       5-WEEK TRENDS
@@ -1642,6 +1680,7 @@
     <button class="ai-tab"        id="tab-profiles" onclick="switchAITab('profiles')">PERSONS</button>
     <button class="ai-tab"        id="tab-trends"   onclick="switchAITab('trends')">5-WEEK TRENDS</button>
     <button class="ai-tab"        id="tab-ops"      onclick="switchAITab('ops')">OPERATIONS</button>
+    <button class="ai-tab"        id="tab-drone"    onclick="switchAITab('drone')">DRONE</button>
     <button class="ai-tab"        id="tab-briefing" onclick="switchAITab('briefing')">BRIEFING</button>
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
@@ -2545,6 +2584,7 @@ function switchAITab(tab) {
   else if (tab === 'profiles') loadProfiles();
   else if (tab === 'trends')   loadTrends();
   else if (tab === 'ops')      loadOperations();
+  else if (tab === 'drone')    loadDroneOps();
   else if (tab === 'briefing') loadBriefing();
   else if (tab === 'alerts')   loadAlerts();
   else if (tab === 'storage')  loadStorage();
@@ -3188,6 +3228,119 @@ async function loadOperations() {
   } catch {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">WATCHER OFFLINE · operator source controls still available after service returns</div>';
   }
+}
+
+async function loadDroneOps() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">CHECKING AIR OPS...</div>';
+  try {
+    const res = await fetch('/api/drone/status');
+    const data = await res.json();
+    const bridge = data.bridge || {};
+    const aircraft = data.aircraft || {};
+    const mission = data.active_mission;
+    const templates = data.templates || [];
+    const history = data.history || [];
+    const bridgeReady = bridge.status === 'online' || bridge.control_mode !== 'planner_only';
+    const sub = document.getElementById('sb-drone-sub');
+    if (sub) sub.textContent = mission ? `${String(mission.label || 'MISSION').toUpperCase()} ACTIVE` : (bridgeReady ? 'BRIDGE READY' : 'PLANNER ONLY');
+
+    const missionHtml = mission ? `
+      <div class="ops-section">
+        <div class="ops-title"><span>ACTIVE MISSION</span><span>${String(mission.state || 'RUNNING').toUpperCase()}</span></div>
+        <div class="ops-kpis">
+          <div class="ops-kpi"><div class="ops-kpi-val" style="color:var(--green);font-size:14px;">${String(mission.label || 'MISSION').toUpperCase()}</div><div class="ops-kpi-label">PROFILE</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val">${mission.altitude_ft || '--'} FT</div><div class="ops-kpi-label">ALTITUDE</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val">${mission.speed_mph || '--'} MPH</div><div class="ops-kpi-label">SPEED</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val">${mission.progress_pct || 0}%</div><div class="ops-kpi-label">PROGRESS</div></div>
+        </div>
+        <div class="drone-progress"><div style="width:${mission.progress_pct || 0}%"></div></div>
+        <div class="ops-tags" style="white-space:normal;line-height:1.7;">${esc(mission.summary || '')}</div>
+        <div class="drone-route">${(mission.route || []).map(w => `<div class="drone-waypoint">${esc(w)}</div>`).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="ops-btn secondary" onclick="abortDroneMission()">ABORT / RTL</button>
+          <button class="ops-btn secondary" onclick="loadDroneOps()">REFRESH</button>
+        </div>
+      </div>` : `
+      <div class="ops-section">
+        <div class="ops-title"><span>MISSION CONTROL</span><span>${bridgeReady ? 'BRIDGE READY' : 'PLANNER ONLY'}</span></div>
+        <div class="ops-kpis">
+          <div class="ops-kpi"><div class="ops-kpi-val" style="font-size:13px;color:var(--cyan);">${esc(aircraft.callsign || 'PALM-AIR-1')}</div><div class="ops-kpi-label">CALLSIGN</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val" style="font-size:13px;">${esc(aircraft.model || 'DJI')}</div><div class="ops-kpi-label">AIRCRAFT</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val" style="color:${bridgeReady ? 'var(--green)' : 'var(--yellow)'};font-size:13px;">${String(bridge.status || 'NOT CONFIGURED').toUpperCase()}</div><div class="ops-kpi-label">BRIDGE</div></div>
+          <div class="ops-kpi"><div class="ops-kpi-val" style="font-size:13px;">${String(bridge.control_mode || 'PLANNER').toUpperCase()}</div><div class="ops-kpi-label">MODE</div></div>
+        </div>
+        <div style="color:var(--dim);font-size:8px;line-height:1.8;letter-spacing:0.8px;">${esc(bridge.note || '')}</div>
+      </div>`;
+
+    const templateHtml = templates.map(t => `
+      <div class="ops-section">
+        <div class="ops-title"><span>${esc(String(t.label || t.id).toUpperCase())}</span><span>${t.duration_min || '--'} MIN</span></div>
+        <div class="ops-tags" style="white-space:normal;line-height:1.7;">${esc(t.summary || '')}</div>
+        <div class="drone-route">${(t.route || []).map(w => `<div class="drone-waypoint">${esc(w)}</div>`).join('')}</div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center;justify-content:space-between;">
+          <span style="color:var(--dim);font-size:7px;letter-spacing:1px;">${esc((t.capture || []).join(' · '))}</span>
+          <button class="ops-btn" onclick="startDroneMission(${esc(jsArg(t.id))})">QUEUE / START</button>
+        </div>
+      </div>`).join('');
+
+    const historyHtml = history.slice(0, 8).map(h => {
+      const ts = new Date((h.completed_ts || h.aborted_ts || h.started_ts || 0) * 1000);
+      const when = ts.getTime() ? ts.toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:true}) : '--';
+      return `<div class="ops-log-line"><span>${esc(String(h.label || h.id || 'MISSION').toUpperCase())}</span><span>${esc(String(h.state || 'done').toUpperCase())} · ${when}</span></div>`;
+    }).join('') || '<div style="color:var(--dim);font-size:8px;">No mission history yet.</div>';
+
+    body.innerHTML = `
+      ${missionHtml}
+      <div class="ops-grid">
+        <div>${templateHtml}</div>
+        <div>
+          <div class="ops-section">
+            <div class="ops-title"><span>REAL DJI INTEGRATION PATH</span><span>ANDROID / DOCK</span></div>
+            <div style="color:var(--text);font-size:8px;line-height:1.9;letter-spacing:0.8px;">
+              DJI consumer and enterprise control generally needs a native Android bridge via DJI Mobile SDK, or a DJI Dock / FlightHub style cloud bridge for docked enterprise aircraft. PALM COMMAND should own mission intent, audit, video review, and alerts; the bridge should own aircraft safety, geofence checks, telemetry, and manual pilot takeover.
+            </div>
+          </div>
+          <div class="ops-section">
+            <div class="ops-title"><span>SAFETY GATES</span><span>REQUIRED</span></div>
+            <div class="ops-log-line"><span>REMOTE PILOT</span><span>ON SITE / IN COMMAND</span></div>
+            <div class="ops-log-line"><span>ROUTE</span><span>PROPERTY / AUTHORIZED AREA</span></div>
+            <div class="ops-log-line"><span>FAILSAFE</span><span>RETURN-TO-HOME</span></div>
+            <div class="ops-log-line"><span>WEATHER</span><span>WIND / VISIBILITY CHECK</span></div>
+          </div>
+          <div class="ops-section">
+            <div class="ops-title"><span>MISSION HISTORY</span><span>${history.length}</span></div>
+            ${historyHtml}
+          </div>
+        </div>
+      </div>`;
+  } catch {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">DRONE OPS OFFLINE · start vision-watcher service</div>';
+  }
+}
+
+async function startDroneMission(kind) {
+  const ok = requireOperatorConfirm('LAUNCH', 'Queue this drone mission? Keep a remote pilot in command and obey local airspace rules.');
+  if (!ok) return;
+  await fetch('/api/drone/mission', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({kind, operator: 'dashboard'}),
+  });
+  recordAudit('DRONE MISSION', kind.toUpperCase());
+  loadDroneOps();
+}
+
+async function abortDroneMission() {
+  const ok = requireOperatorConfirm('ABORT', 'Abort the active drone mission and return to launch?');
+  if (!ok) return;
+  await fetch('/api/drone/abort', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({reason: 'operator abort from dashboard'}),
+  });
+  recordAudit('DRONE ABORT', 'RETURN TO LAUNCH');
+  loadDroneOps();
 }
 
 async function loadBriefing() {
