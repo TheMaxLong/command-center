@@ -238,7 +238,10 @@ async def backfill_camera(
     if job_id:
         _jobs[job_id]["status"] = "listing"
 
-    dates = _list_dates(ip, pwd, start_date, end_date)
+    # pytapo's listing helpers are synchronous wrappers around async transport.
+    # Run them off the watcher/backfill event loop or they can collide with
+    # "Cannot run the event loop while another loop is running".
+    dates = await asyncio.to_thread(_list_dates, ip, pwd, start_date, end_date)
     _log(f"[{cam_id}] {len(dates)} date(s) with recordings: {', '.join(dates) or 'none'}")
 
     if list_dates_only or not dates:
@@ -249,7 +252,7 @@ async def backfill_camera(
 
     for date_str in dates:
         _log(f"[{cam_id}] Scanning {date_str}...")
-        segments = _list_recordings(ip, pwd, date_str)
+        segments = await asyncio.to_thread(_list_recordings, ip, pwd, date_str)
         if not segments:
             _log(f"  [{cam_id}] {date_str} — no segments returned")
             continue

@@ -46,11 +46,14 @@ import entity_resolution
 import forward_intel
 import notifier
 import evidence_export
+import vision_tools
+import drone_ops
 
 # ── Config ────────────────────────────────────────────────────────
 SERVE_PORT  = int(os.environ.get("WATCHER_PORT", "8181"))
 CONFIG_FILE = Path(os.environ.get("CAMERAS_CONFIG", "/config/cameras.yaml"))
 MEDIA_DIR   = Path(os.environ.get("MEDIA_DIR", "/tmp/cams"))
+SCENE_ZONES_FILE = Path(os.environ.get("SCENE_ZONES_FILE", "/data/scene_zones.json"))
 
 PREVIEW_REQ = json.dumps({
     "type": "request", "seq": 1,
@@ -71,14 +74,138 @@ class CameraState:
     last_detections: list            = field(default_factory=list)
     last_profiles:   list            = field(default_factory=list)
     last_summary:    str             = ""
+    last_vision:      dict            = field(default_factory=dict)
 
 cameras: dict[str, CameraState] = {}
+_watch_modes: dict[str, dict] = {}
+
+
+def _start_watch_mode(
+    cam_id: str,
+    minutes: float = 10,
+    poll_interval: float = 3,
+    cooldown: float = 60,
+    capture_duration: int = 8,
+) -> dict:
+    """Temporarily make a battery camera more attentive after operator request."""
+    minutes = max(1.0, min(float(minutes), 60.0))
+    mode = {
+        "active_until": time.time() + minutes * 60,
+        "minutes": minutes,
+        "poll_interval": max(1.0, min(float(poll_interval), 30.0)),
+        "cooldown": max(0.0, min(float(cooldown), 900.0)),
+        "capture_duration": max(3, min(int(capture_duration), 15)),
+    }
+    _watch_modes[cam_id] = mode
+    print(
+        f"[watch] {cam_id}: operator watch for {minutes:.0f}m "
+        f"poll={mode['poll_interval']}s cooldown={mode['cooldown']}s",
+        flush=True,
+    )
+    return _watch_status(cam_id)
+
+
+def _watch_status(cam_id: str) -> dict:
+    mode = _watch_modes.get(cam_id)
+    now = time.time()
+    if not mode or mode.get("active_until", 0) <= now:
+        _watch_modes.pop(cam_id, None)
+        return {"active": False, "remaining_s": 0}
+    return {
+        "active": True,
+        "remaining_s": int(mode["active_until"] - now),
+        "poll_interval": mode.get("poll_interval"),
+        "cooldown": mode.get("cooldown"),
+        "capture_duration": mode.get("capture_duration"),
+    }
 
 # ── Exclusion zones: cam_id → list of normalized {x1,y1,x2,y2} rects ─
 _exclusion_zones: dict[str, list[dict]] = {}
 
 # ── Known zones: same format, but detections are tagged not dropped ──
 _known_zones: dict[str, list[dict]] = {}
+
+# ── Attention zones: operator-defined areas the AI should emphasize ──
+_attention_zones: dict[str, list[dict]] = {
+    "front_cam": [
+        {
+            "label": "parking lot",
+            "x1": 0.0,
+            "y1": 0.0,
+            "x2": 0.46,
+            "y2": 1.0,
+            "priority": "high",
+            "note": "Left side of frame; operator focus area.",
+        }
+    ]
+}
+
+
+def _clean_zone(zone: dict) -> dict:
+    def clamp(v, default):
+        try:
+            return max(0.0, min(1.0, float(v)))
+        except Exception:
+            return default
+    x1 = clamp(zone.get("x1"), 0.0)
+    y1 = clamp(zone.get("y1"), 0.0)
+    x2 = clamp(zone.get("x2"), 1.0)
+    y2 = clamp(zone.get("y2"), 1.0)
+    return {
+        "label": str(zone.get("label") or "focus").strip()[:48],
+        "x1": min(x1, x2),
+        "y1": min(y1, y2),
+        "x2": max(x1, x2),
+        "y2": max(y1, y2),
+        "priority": str(zone.get("priority") or "normal").strip()[:16],
+        "note": str(zone.get("note") or "").strip()[:160],
+    }
+
+
+def _load_scene_zones() -> None:
+    if not SCENE_ZONES_FILE.exists():
+        return
+    try:
+        data = json.loads(SCENE_ZONES_FILE.read_text())
+        for cam_id, zones in (data.get("attention_zones") or {}).items():
+            if isinstance(zones, list):
+                _attention_zones[cam_id] = [_clean_zone(z) for z in zones]
+        print(f"[scene] loaded attention zones from {SCENE_ZONES_FILE}", flush=True)
+    except Exception as e:
+        print(f"[scene] zone load error: {e}", flush=True)
+
+
+def _save_scene_zones() -> None:
+    try:
+        SCENE_ZONES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SCENE_ZONES_FILE.write_text(json.dumps({"attention_zones": _attention_zones}, indent=2))
+    except Exception as e:
+        print(f"[scene] zone save error: {e}", flush=True)
+
+
+def _tag_attention_zones(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
+    """Tag detections inside operator attention zones."""
+    zones = _attention_zones.get(cam_id)
+    if not zones or not detections or not snap_path:
+        return detections
+    try:
+        from PIL import Image
+        with Image.open(snap_path) as img:
+            iw, ih = img.size
+    except Exception:
+        return detections
+
+    for det in detections:
+        cx, cy = det.get("cx", 0), det.get("cy", 0)
+        nx, ny = cx / iw, cy / ih
+        hit = next(
+            (z for z in zones if z["x1"] <= nx <= z["x2"] and z["y1"] <= ny <= z["y2"]),
+            None
+        )
+        if hit:
+            det["attention_zone"] = hit.get("label", "focus")
+            det["attention_priority"] = hit.get("priority", "normal")
+    return detections
 
 
 def _tag_known_zones(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
@@ -158,6 +285,81 @@ def _purge_old_media(days: int = ARCHIVE_RETENTION_DAYS, dry_run: bool = False) 
     if not dry_run and ids:
         deleted = event_db.purge_events(ids)
     return {"purged_events": len(ids), "deleted_records": deleted, "bytes_freed": freed, "dry_run": dry_run}
+
+
+def _delete_event_media(rows: list[dict], include_latest: bool = False) -> dict:
+    """Delete archived media files for selected events, then report freed space."""
+    files_deleted = 0
+    bytes_freed = 0
+    keys = ["archived_clip", "archived_snap"]
+    if include_latest:
+        keys += ["clip_path", "snap_path"]
+
+    for row in rows:
+        for path_key in keys:
+            raw = row.get(path_key)
+            if not raw:
+                continue
+            path = Path(raw)
+            try:
+                if not path.exists() or not path.is_file():
+                    continue
+                bytes_freed += path.stat().st_size
+                path.unlink()
+                files_deleted += 1
+            except Exception as e:
+                print(f"[storage] delete failed for {path}: {e}", flush=True)
+    return {"files_deleted": files_deleted, "bytes_freed": bytes_freed}
+
+
+def _archive_files() -> list[Path]:
+    files: list[Path] = []
+    if not MEDIA_DIR.exists():
+        return files
+    for cam_dir in MEDIA_DIR.iterdir():
+        arc = cam_dir / "archive"
+        if not arc.is_dir():
+            continue
+        files.extend(f for f in arc.iterdir() if f.is_file())
+    return files
+
+
+def _referenced_media_paths() -> set[str]:
+    refs: set[str] = set()
+    for row in event_db.get_all_event_media_rows():
+        for key in ("archived_clip", "archived_snap"):
+            raw = row.get(key)
+            if raw:
+                refs.add(str(Path(raw)))
+    return refs
+
+
+def _orphaned_archive_media(dry_run: bool = True) -> dict:
+    """Find or delete archive files that no longer have an event DB row."""
+    refs = _referenced_media_paths()
+    orphaned = [f for f in _archive_files() if str(f) not in refs]
+    bytes_found = 0
+    files_deleted = 0
+    sample = []
+    for f in orphaned:
+        try:
+            size = f.stat().st_size
+            bytes_found += size
+            if len(sample) < 8:
+                sample.append(str(f))
+            if not dry_run:
+                f.unlink()
+                files_deleted += 1
+        except Exception as e:
+            print(f"[storage] orphan cleanup failed for {f}: {e}", flush=True)
+    return {
+        "orphan_files": len(orphaned),
+        "orphan_bytes": bytes_found,
+        "files_deleted": files_deleted,
+        "bytes_freed": bytes_found if not dry_run else 0,
+        "dry_run": dry_run,
+        "sample": sample,
+    }
 
 
 def _filter_exclusions(cam_id: str, detections: list[dict], snap_path: Optional[str]) -> list[dict]:
@@ -263,6 +465,7 @@ def _run_ai_and_store(
         detections = ai_engine.detect(snap_path)
         detections = _filter_exclusions(cam_id, detections, snap_path)
         detections = _tag_known_zones(cam_id, detections, snap_path)
+        detections = _tag_attention_zones(cam_id, detections, snap_path)
 
     # ── Person tracking: Kalman filter + Hungarian assignment (ByteTrack)
     if detections:
@@ -274,6 +477,26 @@ def _run_ai_and_store(
             # Fallback to legacy IoU tracker if Kalman fails
             tracker    = ai_engine.get_tracker(cam_id)
             detections = tracker.update(detections, event_ts)
+
+    # ── Pose + gait landmarks: posture tags, skeleton points, gait signature
+    if snap_path and detections and any(d.get("class") == "person" for d in detections):
+        try:
+            detections = gait_engine.process_frame(snap_path, detections, cam_id, event_ts)
+        except Exception as ge:
+            print(f"[pose] error: {ge}", flush=True)
+
+    detections = vision_tools.enrich_detections(
+        cam_id,
+        detections,
+        snap_path,
+        _attention_zones.get(cam_id, []),
+        _known_zones.get(cam_id, []),
+    )
+    vision_summary = vision_tools.scene_metrics(
+        cam_id,
+        detections,
+        _attention_zones.get(cam_id, []),
+    )
 
     # ── License plate recognition on vehicle detections
     if snap_path and detections:
@@ -292,7 +515,12 @@ def _run_ai_and_store(
     _archive_media(cam_id, event_id, event_ts, clip_path, snap_path)
 
     if snap_path and detections:
-        ai_engine.annotate(snap_path, detections)
+        ai_engine.annotate(
+            snap_path,
+            detections,
+            attention_zones=_attention_zones.get(cam_id, []),
+            known_zones=_known_zones.get(cam_id, []),
+        )
 
     # Person profiling
     profile_ids: list[int] = []
@@ -308,15 +536,6 @@ def _run_ai_and_store(
             }
             for pid in profile_ids
         ]
-
-    # ── Gait analysis — skeletal biometric identification
-    if snap_path and detections:
-        person_dets = [d for d in detections if d.get("class") == "person"]
-        if person_dets:
-            try:
-                detections = gait_engine.process_frame(snap_path, detections, cam_id, event_ts)
-            except Exception as ge:
-                print(f"[gait] error: {ge}", flush=True)
 
     # ── Face intelligence — compare against FBI + POI database
     if snap_path and detections:
@@ -400,6 +619,7 @@ def _run_ai_and_store(
         state.last_detections = detections
         state.last_profiles   = profile_objs
         state.last_summary    = summary
+        state.last_vision     = vision_summary
 
     if detections:
         ts_str = datetime.now().strftime("%H:%M:%S")
@@ -425,7 +645,8 @@ async def _tapo_capture(cam_cfg: dict, cam_id: str) -> tuple[bool, bool]:
     ip  = cam_cfg["ip"]
     port = int(cam_cfg.get("port", 8800))
     pwd  = cam_cfg["password"]
-    dur  = int(cam_cfg.get("capture_duration", 9))
+    watch = _watch_status(cam_id)
+    dur  = int(watch.get("capture_duration") or cam_cfg.get("capture_duration", 9))
 
     session = HttpMediaSession(
         ip=ip, cloud_password=pwd, super_secret_key="",
@@ -459,8 +680,8 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
     cam_id     = cam_cfg["id"]
     ip         = cam_cfg["ip"]
     port       = int(cam_cfg.get("port", 8800))
-    poll_s     = float(cam_cfg.get("poll_interval", 3))
-    cooldown_s = float(cam_cfg.get("cooldown", 300))
+    base_poll_s = float(cam_cfg.get("poll_interval", 3))
+    base_cooldown_s = float(cam_cfg.get("cooldown", 300))
     # Require this many consecutive open polls before firing.
     # Wind/trees cause single-poll blips; a person walking up holds the port
     # open for multiple polls in a row. Default 2 = one confirmation poll.
@@ -472,10 +693,13 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
     confirm_streak = 0          # consecutive polls where port was open
     state          = cameras[cam_id]
 
-    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {poll_s}s "
-          f"cooldown={cooldown_s}s confirm={confirm_needed}", flush=True)
+    print(f"[{cam_id}] Tapo watcher — {ip}:{port} every {base_poll_s}s "
+          f"cooldown={base_cooldown_s}s confirm={confirm_needed}", flush=True)
 
     while True:
+        watch = _watch_status(cam_id)
+        poll_s = float(watch.get("poll_interval") or base_poll_s)
+        cooldown_s = float(watch.get("cooldown") or base_cooldown_s)
         try:
             _, w = await asyncio.wait_for(asyncio.open_connection(ip, port), timeout=3)
             w.close()
@@ -556,8 +780,34 @@ async def go2rtc_poll_loop(cam_cfg: dict) -> None:
             state.last_seen = time.time()
 
             detections  = ai_engine.detect(snap)
+            detections = _filter_exclusions(cam_id, detections, str(snap))
+            detections = _tag_known_zones(cam_id, detections, str(snap))
+            detections = _tag_attention_zones(cam_id, detections, str(snap))
             if detections:
-                ai_engine.annotate(snap, detections)
+                try:
+                    import tracker_kalman
+                    detections = tracker_kalman.get_tracker(cam_id).update(detections, state.last_seen)
+                except Exception:
+                    detections = ai_engine.get_tracker(cam_id).update(detections, state.last_seen)
+            if detections and any(d.get("class") == "person" for d in detections):
+                try:
+                    detections = gait_engine.process_frame(str(snap), detections, cam_id, state.last_seen)
+                except Exception as ge:
+                    print(f"[pose] {cam_id} error: {ge}", flush=True)
+            detections = vision_tools.enrich_detections(
+                cam_id,
+                detections,
+                str(snap),
+                _attention_zones.get(cam_id, []),
+                _known_zones.get(cam_id, []),
+            )
+            if detections:
+                ai_engine.annotate(
+                    snap,
+                    detections,
+                    attention_zones=_attention_zones.get(cam_id, []),
+                    known_zones=_known_zones.get(cam_id, []),
+                )
             crops       = ai_engine.extract_crops(snap, detections)
             profile_ids = profiler.match_or_create(cam_id, state.last_seen, crops)
             profile_objs = [
@@ -569,6 +819,7 @@ async def go2rtc_poll_loop(cam_cfg: dict) -> None:
             state.last_detections = detections
             state.last_profiles   = profile_objs
             state.last_summary    = intel_engine.scene_summary(detections, profile_objs, cam_id)
+            state.last_vision     = vision_tools.scene_metrics(cam_id, detections, _attention_zones.get(cam_id, []))
 
             if detections:
                 ts_str = datetime.now().strftime("%H:%M:%S")
@@ -1143,6 +1394,10 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/intel/behavior":
             self._json({"briefing": forward_intel.behavior_briefing()})
 
+        # ─── Drone operations planner ─────────────────────────────────
+        elif p == "/drone/status":
+            self._json(drone_ops.status())
+
         elif parsed.path.startswith("/intel/classify/"):
             eid = parsed.path.split("/intel/classify/", 1)[1].rstrip("/")
             if not eid or len(eid) > 64 or not all(c.isalnum() or c in "-_" for c in eid):
@@ -1165,6 +1420,29 @@ class Handler(BaseHTTPRequestHandler):
                 for j in backfill_tapo.list_jobs()
             ]})
 
+        # ─── Scene memory / attention zones ────────────────────────────
+        elif p in ("/scene/zones", "/api/scene/zones"):
+            cam = qp("camera")
+            if cam:
+                self._json({"camera": cam, "attention_zones": _attention_zones.get(cam, [])})
+            else:
+                self._json({"attention_zones": _attention_zones})
+
+        # ─── Vision tools / scene intelligence ────────────────────────
+        elif p in ("/vision/capabilities", "/api/vision/capabilities"):
+            self._json(vision_tools.capabilities())
+
+        elif parsed.path.startswith("/vision/scene/") or parsed.path.startswith("/api/vision/scene/"):
+            prefix = "/api/vision/scene/" if parsed.path.startswith("/api/vision/scene/") else "/vision/scene/"
+            cam_id = parsed.path.split(prefix, 1)[1].rstrip("/")
+            if cam_id not in cameras:
+                self._not_found(); return
+            self._json(cameras[cam_id].last_vision or vision_tools.scene_metrics(
+                cam_id,
+                cameras[cam_id].last_detections,
+                _attention_zones.get(cam_id, []),
+            ))
+
         # ─── Field Scan (phone app) ─────────────────────────────────────
         elif p == "/scan/history":
             limit = min(int(parse_qs(parsed.query).get("limit", ["50"])[0]), 200)
@@ -1178,15 +1456,15 @@ class Handler(BaseHTTPRequestHandler):
             # add archive disk usage
             arc_bytes = 0
             arc_files = 0
-            for cam_dir in MEDIA_DIR.iterdir() if MEDIA_DIR.exists() else []:
-                arc = cam_dir / "archive"
-                if arc.is_dir():
-                    for f in arc.iterdir():
-                        if f.is_file():
-                            arc_bytes += f.stat().st_size
-                            arc_files += 1
+            for f in _archive_files():
+                arc_bytes += f.stat().st_size
+                arc_files += 1
+            orphans = _orphaned_archive_media(dry_run=True)
             stats["archive_bytes"] = arc_bytes
             stats["archive_files"] = arc_files
+            stats["orphan_files"] = orphans["orphan_files"]
+            stats["orphan_bytes"] = orphans["orphan_bytes"]
+            stats["orphan_sample"] = orphans["sample"]
             stats["retention_days"] = ARCHIVE_RETENTION_DAYS
             self._json(stats)
 
@@ -1451,6 +1729,41 @@ class Handler(BaseHTTPRequestHandler):
             result = _purge_old_media(days=days, dry_run=dry_run)
             self._json(result)
 
+        # POST /media/orphans  {"dry_run": false}
+        elif p == "/media/orphans":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+                dry_run = bool(data.get("dry_run", True))
+            except Exception:
+                dry_run = True
+            result = _orphaned_archive_media(dry_run=dry_run)
+            self._json({"ok": True, **result})
+
+        # POST /drone/mission  {"kind": "perimeter|recon|incident", "notes": "..."}
+        elif p == "/drone/mission":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            kind = str(data.get("kind") or "perimeter").strip().lower()
+            operator = str(data.get("operator") or "dashboard").strip()
+            notes = str(data.get("notes") or "").strip()
+            self._json(drone_ops.start_mission(kind, operator=operator, notes=notes))
+
+        # POST /drone/abort  {"reason": "..."}
+        elif p == "/drone/abort":
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            self._json(drone_ops.abort_mission(str(data.get("reason") or "operator abort")))
+
         # POST /api/backfill/<cam_id|all>  {"hours": 24}
         elif ((parsed.path.startswith("/api/backfill/") and not parsed.path.startswith("/api/backfill/status"))
               or (parsed.path.startswith("/backfill/") and not parsed.path.startswith("/backfill/status"))):
@@ -1496,15 +1809,20 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(body) if body else {}
             except Exception:
                 data = {}
+            delete_media = bool(data.get("delete_media", True))
             if data.get("all"):
+                rows = event_db.get_all_event_media_rows()
+                media = _delete_event_media(rows, include_latest=True) if delete_media else {"files_deleted": 0, "bytes_freed": 0}
                 with __import__("sqlite3").connect(str(event_db.DB_PATH)) as _c:
                     _c.execute("DELETE FROM events")
                     deleted = _c.execute("SELECT changes()").fetchone()[0]
-                self._json({"ok": True, "deleted": deleted})
+                self._json({"ok": True, "deleted": deleted, **media})
             else:
                 ids = [int(i) for i in data.get("ids", []) if str(i).isdigit()]
+                rows = event_db.get_events_by_ids(ids)
+                media = _delete_event_media(rows, include_latest=False) if delete_media else {"files_deleted": 0, "bytes_freed": 0}
                 deleted = event_db.purge_events(ids) if ids else 0
-                self._json({"ok": True, "deleted": deleted})
+                self._json({"ok": True, "deleted": deleted, **media})
 
         # POST /event/<id>/star  {"starred": true}
         elif parsed.path.startswith("/event/") and parsed.path.endswith("/star"):
@@ -1522,6 +1840,48 @@ class Handler(BaseHTTPRequestHandler):
                 starred = True
             ok = event_db.star_event(eid, starred)
             self._json({"ok": ok, "event_id": eid, "starred": starred})
+
+        # POST /scene/zones/<cam_id>  {"zones": [...]}
+        elif ((parsed.path.startswith("/scene/zones/") or parsed.path.startswith("/api/scene/zones/"))):
+            prefix = "/api/scene/zones/" if parsed.path.startswith("/api/scene/zones/") else "/scene/zones/"
+            cam_id = parsed.path.split(prefix, 1)[1].rstrip("/")
+            if not cam_id:
+                self._not_found(); return
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+                zones = data.get("zones") or data.get("attention_zones") or []
+                if not isinstance(zones, list):
+                    raise ValueError("zones must be a list")
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}); return
+            _attention_zones[cam_id] = [_clean_zone(z) for z in zones]
+            _save_scene_zones()
+            self._json({"ok": True, "camera": cam_id, "attention_zones": _attention_zones[cam_id]})
+
+        # POST /camera/<cam_id>/watch  {"minutes": 10}
+        elif parsed.path.startswith("/camera/") and parsed.path.endswith("/watch"):
+            try:
+                cam_id = parsed.path.strip("/").split("/")[1]
+            except Exception:
+                self._not_found(); return
+            if cam_id not in cameras:
+                self._not_found(); return
+            length = int(self.headers.get("Content-Length", 0))
+            body   = self.rfile.read(length)
+            try:
+                data = json.loads(body) if body else {}
+            except Exception:
+                data = {}
+            status = _start_watch_mode(
+                cam_id,
+                minutes=float(data.get("minutes", 10)),
+                poll_interval=float(data.get("poll_interval", 3)),
+                cooldown=float(data.get("cooldown", 60)),
+                capture_duration=int(data.get("capture_duration", 8)),
+            )
+            self._json({"ok": True, "camera": cam_id, "watch": status})
 
         else:
             self._not_found()
@@ -1552,6 +1912,18 @@ class Handler(BaseHTTPRequestHandler):
             "detections":    s.last_detections,
             "profiles":      s.last_profiles,
             "summary":       s.last_summary,
+            "vision":        s.last_vision,
+            "watch":         _watch_status(cam_id),
+            "attention_zones": _attention_zones.get(cam_id, []),
+            "focus_hits": [
+                {
+                    "class": d.get("class"),
+                    "confidence": d.get("confidence"),
+                    "zone": d.get("attention_zone"),
+                    "priority": d.get("attention_priority"),
+                }
+                for d in s.last_detections if d.get("attention_zone")
+            ],
         }
 
     def _json(self, data: object) -> None:
@@ -1606,6 +1978,7 @@ def load_config() -> list[dict]:
 
 async def main() -> None:
     event_db.init_db()
+    _load_scene_zones()
     cam_cfgs = load_config()
     print(f"[watcher] Starting with {len(cam_cfgs)} camera(s)", flush=True)
 
@@ -1618,6 +1991,11 @@ async def main() -> None:
         if known:
             _known_zones[cfg["id"]] = known
             print(f"[known] {cfg['id']}: {len(known)} zone(s) loaded — alerts suppressed, profiled as NEIGHBOR", flush=True)
+        attention = cfg.get("attention_zones", cfg.get("focus_zones", []))
+        if attention:
+            _attention_zones[cfg["id"]] = [_clean_zone(z) for z in attention]
+            print(f"[scene] {cfg['id']}: {len(attention)} attention zone(s) loaded", flush=True)
+    _save_scene_zones()
 
     # Start intelligence feeds background refresh
     intel_feeds.start_background_refresh(interval_s=180)

@@ -37,6 +37,17 @@ cameras:
     #     y1: 0.0
     #     x2: 0.25
     #     y2: 1.0
+    #
+    # ── Attention zones (optional) ───────────────────────────────
+    # Detections are still recorded normally, but status + agent
+    # briefings call out activity in these operator-priority areas.
+    # attention_zones:
+    #   - label: "parking lot"
+    #     x1: 0.0
+    #     y1: 0.0
+    #     x2: 0.46
+    #     y2: 1.0
+    #     priority: high
 
 
   # ── Tapo D210 Doorbell ─────────────────────────────────────────
@@ -46,8 +57,12 @@ cameras:
     ip:               "${TAPO_IP}"
     password:         "${TAPO_PASSWORD}"
     port:             8800
-    poll_interval:    3       # seconds between TCP probes
-    capture_duration: 9       # seconds of video to capture on motion
+    # Battery-safe default for D210/D230 doorbells. Lower poll_interval catches
+    # faster but can drain battery; use SD backfill for missed/offline windows.
+    poll_interval:    15      # seconds between TCP probes
+    capture_duration: 6       # seconds of video to capture on motion
+    cooldown:         600     # seconds before capturing again
+    motion_confirm:   1       # one confirmed wake poll; slower polling needs this
 
 
   # ── Additional Tapo camera (D230, C310, etc.) ──────────────────

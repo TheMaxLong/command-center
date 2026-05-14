@@ -329,10 +329,20 @@ _BBOX_COLORS: dict[str, str] = {
     "cell phone": "#b07cff",
 }
 
+_POSE_EDGES = [
+    ("nose", "l_eye"), ("nose", "r_eye"), ("l_eye", "l_ear"), ("r_eye", "r_ear"),
+    ("l_shoulder", "r_shoulder"), ("l_shoulder", "l_elbow"), ("l_elbow", "l_wrist"),
+    ("r_shoulder", "r_elbow"), ("r_elbow", "r_wrist"), ("l_shoulder", "l_hip"),
+    ("r_shoulder", "r_hip"), ("l_hip", "r_hip"), ("l_hip", "l_knee"),
+    ("l_knee", "l_ankle"), ("r_hip", "r_knee"), ("r_knee", "r_ankle"),
+]
+
 
 def annotate(
     image_path: Union[str, Path],
     detections: list[dict],
+    attention_zones: list[dict] | None = None,
+    known_zones: list[dict] | None = None,
 ) -> Optional[Path]:
     """
     Draw bounding boxes + confidence labels on a copy of the snapshot.
@@ -347,6 +357,38 @@ def annotate(
         p   = Path(image_path)
         img = Image.open(p).convert("RGB")
         drw = ImageDraw.Draw(img)
+        iw, ih = img.size
+
+        def _zone_rect(zone: dict) -> list[int]:
+            return [
+                int(float(zone.get("x1", 0.0)) * iw),
+                int(float(zone.get("y1", 0.0)) * ih),
+                int(float(zone.get("x2", 1.0)) * iw),
+                int(float(zone.get("y2", 1.0)) * ih),
+            ]
+
+        def _draw_zone(zone: dict, color: str, prefix: str) -> None:
+            x1, y1, x2, y2 = _zone_rect(zone)
+            label = f"{prefix} {str(zone.get('label', 'ZONE')).upper()}"[:48]
+            # sparse operator overlay: thin frame, corner ticks, translucent label strip
+            drw.rectangle([x1, y1, x2, y2], outline=color, width=2)
+            tick = max(14, min(iw, ih) // 45)
+            for ax, ay, sx, sy in [
+                (x1, y1, 1, 1), (x2, y1, -1, 1), (x1, y2, 1, -1), (x2, y2, -1, -1)
+            ]:
+                drw.line([ax, ay, ax + sx * tick, ay], fill=color, width=3)
+                drw.line([ax, ay, ax, ay + sy * tick], fill=color, width=3)
+            pill_w = len(label) * 7 + 10
+            pill_y = max(0, y1 - 18)
+            drw.rectangle([x1, pill_y, min(iw, x1 + pill_w), pill_y + 16], fill="#000000")
+            drw.text((x1 + 5, pill_y + 3), label, fill=color)
+
+        for zone in attention_zones or []:
+            color = "#f5c400" if zone.get("priority") == "high" else "#00b8d9"
+            _draw_zone(zone, color, "FOCUS")
+
+        for zone in known_zones or []:
+            _draw_zone(zone, "#6f7d88", "KNOWN")
 
         # Track count per class for multi-instance labels
         class_seen: dict[str, int] = {}
@@ -366,8 +408,37 @@ def annotate(
                 label = f"{cls.upper()}·{idx+1} {conf}%"
             else:
                 label = f"{cls.upper()} {conf}%"
+            if d.get("track_id"):
+                label += f" T{d.get('track_id')}"
+            if d.get("attention_zone"):
+                label += f" · {str(d.get('attention_zone')).upper()[:14]}"
+            if d.get("pose_status") and d.get("pose_status") != "unknown":
+                label += f" · {str(d.get('pose_status')).upper()[:10]}"
 
             # Bounding box (2 px border + subtle corner ticks)
+            if d.get("operator_focus"):
+                color = "#f5c400" if d.get("attention_priority") == "high" else "#00d46a"
+
+            landmarks = {
+                str(point.get("name")): point
+                for point in (d.get("pose_landmarks") or [])
+                if float(point.get("confidence", 0)) >= 0.28
+            }
+            if landmarks:
+                pose_color = "#00d46a" if (d.get("pose") or {}).get("quality", 0) >= 0.55 else "#f5c400"
+                for a, b in _POSE_EDGES:
+                    pa, pb = landmarks.get(a), landmarks.get(b)
+                    if not pa or not pb:
+                        continue
+                    drw.line(
+                        [int(pa["x"]), int(pa["y"]), int(pb["x"]), int(pb["y"])],
+                        fill=pose_color,
+                        width=2,
+                    )
+                for point in landmarks.values():
+                    px, py = int(point["x"]), int(point["y"])
+                    drw.ellipse([px - 2, py - 2, px + 2, py + 2], fill=pose_color)
+
             drw.rectangle([x1, y1, x2, y2], outline=color, width=2)
             tick = 8
             for tx, ty in [(x1,y1),(x2,y1),(x1,y2),(x2,y2)]:

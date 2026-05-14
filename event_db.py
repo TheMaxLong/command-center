@@ -309,6 +309,27 @@ def purge_events(event_ids: list[int]) -> int:
         return c.execute("SELECT changes()").fetchone()[0]
 
 
+def get_events_by_ids(event_ids: list[int]) -> list[dict]:
+    """Return event rows for delete/export flows."""
+    if not event_ids:
+        return []
+    placeholders = ",".join("?" * len(event_ids))
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, clip_path, snap_path, archived_clip, archived_snap "
+            f"FROM events WHERE id IN ({placeholders})",
+            event_ids,
+        )]
+
+
+def get_all_event_media_rows() -> list[dict]:
+    """Return all event media paths before a full event-log clear."""
+    with _conn() as c:
+        return [dict(r) for r in c.execute(
+            "SELECT id, clip_path, snap_path, archived_clip, archived_snap FROM events"
+        )]
+
+
 # ── Profiles: write ───────────────────────────────────────────────
 
 def create_profile(

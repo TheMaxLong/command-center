@@ -30,6 +30,7 @@ services:
       - TAPO_PASSWORD=${TAPO_PASSWORD}
       - DB_PATH=/data/events.db
       - FACE_CACHE_DIR=/data/face_intel
+      - SCENE_ZONES_FILE=/data/scene_zones.json
       - CAMERAS_CONFIG=/config/cameras.yaml
       - WATCHER_PORT=8181
       # AI_MIN_CONF=0.35       # detection confidence threshold (default 0.35)
@@ -60,6 +61,7 @@ services:
       - TAPO_PASSWORD=${TAPO_PASSWORD}
       - DB_PATH=/data/events.db
       - FACE_CACHE_DIR=/data/face_intel
+      - SCENE_ZONES_FILE=/data/scene_zones.json
       - CAMERAS_CONFIG=/config/cameras.yaml
       - MEDIA_DIR=/tmp/cams
 
