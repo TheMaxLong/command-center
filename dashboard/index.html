@@ -1689,6 +1689,7 @@
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
     <button class="ai-tab"        id="tab-gait"     onclick="switchAITab('gait')">GAIT BIO</button>
+    <button class="ai-tab"        id="tab-mocap"    onclick="switchAITab('mocap')">MOCAP INTAKE</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -2619,6 +2620,7 @@ function switchAITab(tab) {
   else if (tab === 'alerts')   loadAlerts();
   else if (tab === 'storage')  loadStorage();
   else if (tab === 'gait')     loadGait();
+  else if (tab === 'mocap')    loadMocapIntake();
 }
 
 async function loadProfiles() {
@@ -3888,6 +3890,119 @@ async function loadGait() {
     document.getElementById('ai-body').innerHTML =
       '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">GAIT ENGINE OFFLINE · start vision-watcher service</div>';
   }
+}
+
+function loadMocapIntake() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = `
+    <div style="padding:20px;">
+      <div style="font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:20px;">
+        MOCAP INTAKE · FREEMOCAP SKELETON EXTRACTION
+      </div>
+
+      <div style="border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;"
+           id="mocap-drop-zone"
+           ondragover="event.preventDefault(); this.style.borderColor='var(--cyan)'; this.style.background='rgba(0,212,255,0.05)'"
+           ondragleave="this.style.borderColor='var(--border)'; this.style.background='transparent'"
+           ondrop="handleMocapDrop(event)">
+        <div style="font-size:14px;color:var(--text-bright);margin-bottom:8px;">DRAG VIDEO HERE</div>
+        <div style="font-size:8px;color:var(--dim);letter-spacing:1px;">or click to browse</div>
+        <input type="file" id="mocap-file-input" accept="video/*" style="display:none;" onchange="handleMocapFileSelect(event)" />
+      </div>
+
+      <div style="margin-top:20px;font-size:8px;color:var(--dim);letter-spacing:1px;line-height:1.6;">
+        Supported: MP4, MOV, AVI, MKV<br/>
+        Output: BVH skeleton + preview video<br/>
+        Doorbell clips auto-ingested to mocap-from-doorbell/
+      </div>
+
+      <div id="mocap-jobs" style="margin-top:30px;"></div>
+    </div>
+
+    <script>
+      function handleMocapDrop(e) {
+        e.preventDefault();
+        const dropZone = document.getElementById('mocap-drop-zone');
+        dropZone.style.borderColor = 'var(--border)';
+        dropZone.style.background = 'transparent';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) uploadMocapFile(files[0]);
+      }
+
+      document.getElementById('mocap-drop-zone').addEventListener('click', () => {
+        document.getElementById('mocap-file-input').click();
+      });
+
+      function handleMocapFileSelect(e) {
+        if (e.target.files.length > 0) uploadMocapFile(e.target.files[0]);
+      }
+
+      async function uploadMocapFile(file) {
+        const dropZone = document.getElementById('mocap-drop-zone');
+        dropZone.innerHTML = '<div style="color:var(--cyan);">UPLOADING...</div>';
+
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const res = await fetch('/mocap/upload', { method: 'POST', body: formData });
+          const data = await res.json();
+
+          if (data.job_id) {
+            pollMocapJob(data.job_id);
+          } else {
+            dropZone.innerHTML = '<div style="color:var(--red);">UPLOAD FAILED</div>';
+          }
+        } catch (e) {
+          dropZone.innerHTML = '<div style="color:var(--red);">ERROR: ' + String(e).slice(0,50) + '</div>';
+        }
+      }
+
+      async function pollMocapJob(jobId) {
+        const dropZone = document.getElementById('mocap-drop-zone');
+        let pollCount = 0;
+        const maxPolls = 3600; // 1 hour at 1s intervals
+
+        const poll = async () => {
+          try {
+            const res = await fetch('/mocap/status/' + jobId);
+            const job = await res.json();
+
+            if (job.status === 'done') {
+              dropZone.innerHTML = '<div style="color:var(--green);">DONE · OUTPUT: ' + job.output_dir + '</div>';
+              addMocapJobRow(job);
+            } else if (job.status === 'error') {
+              dropZone.innerHTML = '<div style="color:var(--red);">ERROR: ' + job.error + '</div>';
+            } else if (job.status === 'processing') {
+              dropZone.innerHTML = '<div style="color:var(--cyan);">PROCESSING...</div>';
+              pollCount++;
+              if (pollCount < maxPolls) setTimeout(poll, 1000);
+            } else {
+              pollCount++;
+              if (pollCount < maxPolls) setTimeout(poll, 1000);
+            }
+          } catch (e) {
+            pollCount++;
+            if (pollCount < maxPolls) setTimeout(poll, 5000);
+          }
+        };
+        poll();
+      }
+
+      function addMocapJobRow(job) {
+        const jobs = document.getElementById('mocap-jobs');
+        const row = document.createElement('div');
+        row.style.cssText = 'background:rgba(0,212,255,0.03);border:1px solid var(--border);padding:12px;margin-bottom:8px;border-radius:4px;font-size:8px;letter-spacing:1px;';
+        row.innerHTML = \`
+          <div style="color:var(--cyan);margin-bottom:4px;">\${job.job_id}</div>
+          <div style="color:var(--dim);">FILE: \${job.input_file}</div>
+          <div style="color:var(--green);">STATUS: \${job.status}</div>
+          <div style="color:var(--text);margin-top:4px;">OUTPUT: \${job.output_dir || '—'}</div>
+        \`;
+        jobs.insertBefore(row, jobs.firstChild);
+      }
+    </script>
+  `;
 }
 
 function _timeAgo(ts) {
