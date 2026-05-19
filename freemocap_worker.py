@@ -123,36 +123,60 @@ class MocapWorker:
         output_dir = MOCAP_OUT / job.job_id
         output_dir.mkdir(parents=True, exist_ok=True)
 
+        # FreeMoCap requires a recording folder with synchronized_videos/ subdirectory
+        recording_dir = output_dir / "recording"
+        recording_dir.mkdir(parents=True, exist_ok=True)
+        sync_videos_dir = recording_dir / "synchronized_videos"
+        sync_videos_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy input video into the recording structure
+        video_filename = input_path.name
+        video_dest = sync_videos_dir / video_filename
+        try:
+            shutil.copy2(input_path, video_dest)
+            print(f"[FreeMoCap Worker] Copied video: {video_dest}", flush=True)
+        except Exception as e:
+            job.status = "error"
+            job.error = f"Failed to copy video: {str(e)[:300]}"
+            print(f"[FreeMoCap Worker] ERROR {job.job_id}: {job.error}", flush=True)
+            return
+
         try:
             job.status = "processing"
             job.started_at = datetime.now().isoformat()
             print(f"[FreeMoCap Worker] Processing {job.job_id}...", flush=True)
 
-            # Invoke FreeMoCap headless
-            # For now, stub: copy input to output as a placeholder.
-            # In production, use: freemocap --input <file> --output <dir> --headless
+            # Launch FreeMoCap via the launcher script using the venv Python
+            script_path = Path(__file__).parent / "scripts" / "run_freemocap.py"
             result = subprocess.run(
                 [
                     str(FREEMOCAP_BIN),
-                    "-m", "freemocap.cli",
-                    "--input", str(input_path),
-                    "--output", str(output_dir),
-                    "--headless"
+                    str(script_path),
+                    str(recording_dir)
                 ],
                 capture_output=True,
-                timeout=300  # 5-minute timeout
+                timeout=300,  # 5-minute timeout
+                text=True
             )
 
             if result.returncode != 0:
                 job.status = "error"
-                job.error = result.stderr.decode()[:500]  # First 500 chars
+                stderr_msg = result.stderr[:500] if result.stderr else result.stdout[:500]
+                job.error = stderr_msg
                 print(f"[FreeMoCap Worker] FAILED {job.job_id}: {job.error}", flush=True)
                 return
 
-            job.status = "done"
-            job.completed_at = datetime.now().isoformat()
-            job.output_dir = str(output_dir)
-            print(f"[FreeMoCap Worker] DONE {job.job_id}: {output_dir}", flush=True)
+            # FreeMoCap outputs to recording_dir/output_data/
+            output_data_dir = recording_dir / "output_data"
+            if output_data_dir.exists():
+                job.status = "done"
+                job.completed_at = datetime.now().isoformat()
+                job.output_dir = str(output_data_dir)
+                print(f"[FreeMoCap Worker] DONE {job.job_id}: {output_data_dir}", flush=True)
+            else:
+                job.status = "error"
+                job.error = "output_data/ directory not created (FreeMoCap may have failed silently)"
+                print(f"[FreeMoCap Worker] ERROR {job.job_id}: {job.error}", flush=True)
 
         except subprocess.TimeoutExpired:
             job.status = "error"
