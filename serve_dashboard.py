@@ -4,8 +4,10 @@ PALM COMMAND — Dashboard server for Replit.
 Serves the static dashboard on port 5000 and proxies:
   /api/*     → camera watcher on :8181
   /go2rtc/*  → go2rtc on :1984
+  /mocap/*   → FreeMoCap worker
 """
 import os
+import json
 import socket
 import threading
 import urllib.request
@@ -17,6 +19,14 @@ DASHBOARD_DIR = Path(__file__).parent / "dashboard"
 SERVE_PORT = 8888
 WATCHER_URL = "http://localhost:8181"
 GO2RTC_URL = "http://localhost:1984"
+
+# Import FreeMoCap worker (will start when first request arrives)
+try:
+    from freemocap_worker import get_worker
+    MOCAP_WORKER = None  # Lazy init
+except ImportError:
+    MOCAP_WORKER = None
+    print("[WARNING] freemocap_worker not available", flush=True)
 
 
 class DashboardHandler(SimpleHTTPRequestHandler):
@@ -37,6 +47,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self._proxy(WATCHER_URL, self.path)       # archived snap/clip media
         elif self.path.startswith("/go2rtc/"):
             self._proxy(GO2RTC_URL, self.path[7:])   # strip /go2rtc
+        elif self.path.startswith("/mocap/status/"):
+            self._handle_mocap_status(self.path.replace("/mocap/status/", ""))
         elif self.path.rstrip("/") == "/monitor" or self.path.startswith("/monitor?"):
             monitor = DASHBOARD_DIR / "monitor.html"
             self._serve_file(monitor, "text/html")
@@ -69,6 +81,8 @@ class DashboardHandler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/"):
             self._proxy_post(WATCHER_URL, self.path[4:])
+        elif self.path == "/mocap/upload":
+            self._handle_mocap_upload()
         else:
             self.send_response(404); self.end_headers()
 
@@ -186,6 +200,79 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             self.send_header("Content-Type", "text/plain")
             self.end_headers()
             self.wfile.write(str(e).encode())
+
+    def _handle_mocap_upload(self):
+        """Handle POST /mocap/upload with a multipart file upload."""
+        global MOCAP_WORKER
+        if MOCAP_WORKER is None and get_worker is not None:
+            MOCAP_WORKER = get_worker()
+            MOCAP_WORKER.start()
+
+        content_length = int(self.headers.get("Content-Length", 0))
+        if not content_length:
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"no file"}')
+            return
+
+        # Read multipart body (simplified: assumes single file with boundary)
+        body = self.rfile.read(content_length)
+
+        try:
+            # Extract filename from Content-Disposition header
+            disposition = self.headers.get("Content-Disposition", "")
+            filename = "upload.mp4"
+            if 'filename=' in disposition:
+                parts = disposition.split('filename=')
+                if len(parts) > 1:
+                    filename = parts[1].strip('"').split('\n')[0]
+
+            # Write to mocap-in/
+            from pathlib import Path
+            mocap_in = Path("/Volumes/Seagate Portable Drive/command-center/mocap-in")
+            mocap_in.mkdir(parents=True, exist_ok=True)
+            input_path = mocap_in / filename
+
+            with open(input_path, "wb") as f:
+                f.write(body)
+
+            # Queue job
+            job_id = MOCAP_WORKER.submit_job(input_path, source="drag-drop")
+
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "job_id": job_id,
+                "status": "queued",
+                "file": str(input_path)
+            }).encode())
+
+        except Exception as e:
+            self.send_response(500)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps({"error": str(e)}).encode())
+
+    def _handle_mocap_status(self, job_id: str):
+        """Handle GET /mocap/status/{job_id}."""
+        global MOCAP_WORKER
+        if MOCAP_WORKER is None and get_worker is not None:
+            MOCAP_WORKER = get_worker()
+
+        if MOCAP_WORKER is None:
+            self.send_response(503)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"mocap worker unavailable"}')
+            return
+
+        status = MOCAP_WORKER.get_job_status(job_id)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(status).encode())
 
 
 if __name__ == "__main__":
