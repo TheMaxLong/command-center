@@ -514,6 +514,25 @@ def _run_ai_and_store(
     # ── Archive timestamped copies of clip + snap
     _archive_media(cam_id, event_id, event_ts, clip_path, snap_path)
 
+    # ── FreeMoCap auto-extract hook (doorbell motion clip only)
+    if os.getenv("FREEMOCAP_AUTO_EXTRACT") == "1" and cam_id == "doorbell" and clip_path:
+        try:
+            import freemocap_worker
+            worker = freemocap_worker.get_worker()
+            worker.ingest_doorbell_clip(
+                event_id=str(event_id),
+                clip_path=Path(clip_path),
+                metadata={
+                    "camera": cam_id,
+                    "timestamp": event_ts,
+                    "detections_count": len(detections),
+                    "has_person": any(d.get("class") == "person" for d in detections),
+                }
+            )
+            print(f"[mocap] queued doorbell clip {event_id} for FreeMoCap processing", flush=True)
+        except Exception as e:
+            print(f"[mocap] doorbell ingest failed: {e}", flush=True)
+
     if snap_path and detections:
         ai_engine.annotate(
             snap_path,
