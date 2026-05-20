@@ -1265,6 +1265,15 @@ class Handler(BaseHTTPRequestHandler):
             camera = qp("camera")
             self._json(intel_engine.daily_briefing(camera))
 
+        # /intel/morning-brief[?force=1]  — local LLM (Ollama) narrative
+        elif p == "/intel/morning-brief":
+            try:
+                import llm_brief as _llm
+                force = qp("force") in ("1", "true", "yes")
+                self._json(_llm.generate_morning_brief(force=force))
+            except ImportError as e:
+                self._json({"error": f"llm_brief unavailable: {e}"})
+
         # /intel/alerts[?camera=]
         elif p == "/intel/alerts":
             camera = qp("camera")

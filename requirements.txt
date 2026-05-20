@@ -15,9 +15,11 @@ paho-mqtt>=1.6  # Blitzortung MQTT broker support
 # Audio event classification (YAMNet + Silero-VAD)
 # Adds ~2.6 GB to the container image. Only loaded when audio_events: true
 # is set on a camera in cameras.yaml.
-tensorflow>=2.13
-tensorflow-hub>=0.14
-torch>=2.0
-torchaudio>=2.0
-librosa>=0.10
-scipy>=1.10
+# Floors bumped to known-good (2026-05-20 container); majors capped to avoid
+# surprise breaking changes on rebuild.
+tensorflow>=2.21,<3.0
+tensorflow-hub>=0.16,<1.0
+torch>=2.12,<3.0
+torchaudio>=2.11,<3.0
+librosa>=0.11,<1.0
+scipy>=1.17,<2.0
