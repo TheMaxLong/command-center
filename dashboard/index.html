@@ -1338,6 +1338,32 @@
       content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
       background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);
     }
+    /* ── Clermont-style status ticker (PLAN 2.16) ── */
+    #status-ticker {
+      position: fixed; left: 0; right: 0; bottom: 0; height: 22px;
+      background: linear-gradient(180deg, #050810 0%, #0a0e1a 100%);
+      border-top: 1px solid rgba(0,212,255,0.25);
+      box-shadow: 0 -4px 12px rgba(0,0,0,0.6);
+      overflow: hidden; z-index: 9000;
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      font-size: 10px; letter-spacing: 1.5px; line-height: 22px;
+    }
+    #status-ticker-track {
+      display: inline-block; white-space: nowrap; padding-left: 100%;
+      animation: ticker-scroll 90s linear infinite;
+      color: var(--text);
+    }
+    #status-ticker:hover #status-ticker-track { animation-play-state: paused; }
+    #status-ticker .tk-sep { color: rgba(0,212,255,0.35); margin: 0 14px; }
+    #status-ticker .tk-key { color: var(--cyan); margin-right: 6px; }
+    #status-ticker .tk-warn { color: var(--orange, #d97706); }
+    #status-ticker .tk-crit { color: var(--red); }
+    #status-ticker .tk-ok   { color: var(--text); }
+    @keyframes ticker-scroll {
+      0%   { transform: translateX(0); }
+      100% { transform: translateX(-100%); }
+    }
+    body { padding-bottom: 22px; }
   </style>
 </head>
 <body>
@@ -4304,6 +4330,90 @@ for (let i = 0; i < tileCount; i++) {
   renderTile(i);
   scheduleRotation(i);
 }
+
+// ── Clermont status ticker (PLAN 2.16) ─────────────────────────────
+async function refreshStatusTicker() {
+  const track = document.getElementById('status-ticker-track');
+  if (!track) return;
+  const safe = (p) => p.then(r => r.ok ? r.json() : null).catch(() => null);
+  const [bright, aqi, weather, lightning, events, sentinel] = await Promise.all([
+    safe(fetch('/api/local/doorbell-brightness')),
+    safe(fetch('/api/feeds/aqi')),
+    safe(fetch('/api/feeds/weather')),
+    safe(fetch('/api/feeds/lightning')),
+    safe(fetch('/api/events?limit=1')),
+    safe(fetch('/api/sentinel-digest')),
+  ]);
+  const segs = [];
+  const sep = '<span class="tk-sep">·</span>';
+  const k = (label, val, cls = 'tk-ok') =>
+    `<span class="tk-key">${label}</span><span class="${cls}">${val}</span>`;
+
+  if (bright) {
+    const pct = bright.last_brightness_pct;
+    const state = bright.state || 'OK';
+    if (pct == null) segs.push(k('DOORBELL', state));
+    else {
+      const cls = state === 'ALERTED' ? 'tk-crit' : pct < 5 ? 'tk-warn' : 'tk-ok';
+      segs.push(k('DOORBELL', `${pct.toFixed(1)}% ${state}`, cls));
+    }
+  }
+  if (events && events.length) {
+    const ts = events[0].ts;
+    if (ts) {
+      const ageMin = Math.round((Date.now() / 1000 - ts) / 60);
+      const lbl = ageMin < 60 ? `${ageMin}m AGO`
+        : ageMin < 1440 ? `${(ageMin/60).toFixed(1)}h AGO`
+        : `${(ageMin/1440).toFixed(1)}d AGO`;
+      segs.push(k('LAST MOTION', lbl));
+    }
+  }
+  if (aqi) {
+    if (aqi.status === 'ok') {
+      const m = aqi.median_aqi;
+      const cls = m >= 150 ? 'tk-crit' : m >= 100 ? 'tk-warn' : 'tk-ok';
+      const label = m >= 200 ? 'UNHEALTHY' : m >= 150 ? 'USG' : m >= 100 ? 'MODERATE' : m >= 50 ? 'FAIR' : 'GOOD';
+      segs.push(k('AQI', `${m.toFixed(0)} ${label}`, cls));
+    } else if (aqi.status === 'unconfigured') {
+      segs.push(k('AQI', 'set PURPLEAIR_API_KEY', 'tk-warn'));
+    }
+  }
+  if (weather && weather.items) {
+    const n = weather.items.length;
+    const cls = n > 0 ? 'tk-warn' : 'tk-ok';
+    segs.push(k('WX', n ? `${n} ALERT${n>1?'S':''}` : 'CLEAR', cls));
+  }
+  if (lightning && lightning.summary) {
+    const s = lightning.summary;
+    const n = s.strike_count || 0;
+    if (n > 0) {
+      const cls = (s.nearest_distance_km || 99) < 10 ? 'tk-crit' : 'tk-warn';
+      segs.push(k('LIGHTNING', `${n} strikes, nearest ${s.nearest_distance_km}km`, cls));
+    } else {
+      const mqtt = s.mqtt_status || {};
+      const cls = mqtt.connected ? 'tk-ok' : 'tk-warn';
+      segs.push(k('LIGHTNING', mqtt.connected ? 'NONE' : 'MQTT DOWN', cls));
+    }
+  }
+  if (sentinel && sentinel.entries && sentinel.entries.length) {
+    const last = sentinel.entries[0];
+    const cls = last.level === 'critical' ? 'tk-crit' : last.level === 'warn' ? 'tk-warn' : 'tk-ok';
+    const msg = (last.message || '').slice(0, 60);
+    segs.push(k('SENTINEL', `${last.watcher.toUpperCase()}: ${msg}`, cls));
+  }
+
+  if (segs.length) {
+    const oneRun = segs.join(sep);
+    track.innerHTML = oneRun + sep + oneRun + sep;
+  } else {
+    track.innerHTML = '<span class="tk-key">PALM COMMAND</span><span class="tk-ok">no feeds available</span>';
+  }
+}
+refreshStatusTicker();
+setInterval(refreshStatusTicker, 30000);
 </script>
+
+<div id="status-ticker"><div id="status-ticker-track">PALM COMMAND · initializing telemetry...</div></div>
+
 </body>
 </html>

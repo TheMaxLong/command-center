@@ -45,6 +45,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
                 and self.path.startswith("/go2rtc/")):
             self._proxy_websocket(self.path[7:])
             return
+        if self.path.rstrip("/") == "/api/local/doorbell-brightness":
+            self._serve_doorbell_brightness()
+            return
         if self.path.rstrip("/") == "/api/sentinel-digest" or self.path.startswith("/api/sentinel-digest?"):
             self._serve_sentinel_digest()
             return
@@ -116,6 +119,26 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_doorbell_brightness(self):
+        """Serve the latest doorbell-brightness-watcher state as JSON.
+        Reads ~/.local/state/doorbell-brightness.json — written every 5min
+        by the Mac launchd job (~/bin/doorbell-brightness-watcher.sh)."""
+        import json as _json
+        state_file = Path.home() / ".local" / "state" / "doorbell-brightness.json"
+        if not state_file.exists():
+            body = _json.dumps({"status": "no-state", "strikes": 0, "last_brightness_pct": None}).encode()
+        else:
+            try:
+                body = state_file.read_bytes()
+            except OSError:
+                body = _json.dumps({"status": "read-error"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_sentinel_digest(self):
         """Parse the Sentinel digest tail (synced from Pixel 6) into JSON.
