@@ -7,13 +7,45 @@ plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 
 # Overnight HANDOFF — read this first at 6am
 
-## TL;DR (one-line per change)
+## TL;DR (read this at 6am)
 
-_(populated as each task ships)_
+**8 of 11 tasks shipped, 2 deferred for your input, 1 not-applicable.** Two git pushes:
+- `command-center` `628f4e6` — overnight session: SENTINEL tile + night-vision lock + bench + POLICY
+- `HARK-System-Map` `463c023` — Sentinel: auto-park cannamax + commit sshd-watchdog
+
+### What's new and watching the house
+
+| Watcher | Where | Cadence | Alerts |
+|---|---|---|---|
+| **Doorbell brightness regression** | Mac launchd | 5min | ntfy if last snap <2% brightness for 3 consecutive checks |
+| **Pixel 6 sshd (off-device alert)** | Mac launchd | 5min | ntfy if `:8022` unreachable for 2 consecutive checks |
+| **Pixel 6 sshd (on-device respawn)** | Termux cron | 1min | auto-revives sshd if dead |
+| **Sentinel digest sync** | Mac launchd | 5min | pulls `~/sentinel/digest.log` to Mac for the dashboard tile |
+| **Night vision lock (hourly)** | Mac launchd | 1h | re-asserts `wtl_night_vision` if Tapo D210 firmware ever drifts back |
+| **Night vision lock (boot)** | start.sh | on launch | same, best-effort during stack startup |
+
+### What's new in the dashboard
+
+- **`/api/sentinel-digest`** endpoint serves the Pixel 6 digest as JSON.
+- **SENTINEL tab** in AI Intel panel — color-coded entries + sync staleness indicator. Open AI panel → click last tab.
+- Browser-tested end-to-end (Playwright). Screenshot at `/tmp/sentinel-tab.png`.
+
+### What needs your eyes (in priority order)
+
+1. **Two diverged source dirs.** `~/palm-command/` and `~/Documents/GitHub/command-center/` are no longer in sync. The PM2 dashboard runs from palm-command; Docker stack runs from command-center; git remote IS command-center. I synced my edits to both for dashboard work. Recommend: pick one canonical, symlink the other. Details in section below.
+2. **Doorbell USB-C wiring** (PLAN 0.1) — pytapo says it's still on battery. Confirm USB-C plugged in, then crank `cameras.yaml` cadence (one-line revert, in section).
+3. **POLICY.md is DRAFT** (`docs/POLICY.md`) — needs your review + a legal pass before any audio feature (PLAN 2.x) ships. Items marked `(legal: review)` inline.
+4. **Shadowbroker backend in OOM restart loop** (out of scope — flag in case it's news).
+
+### What I did NOT touch and why
+
+- Wood-grain v2, HARK Map node positions, any facility code — aesthetic / strategic / off-scope.
+- YOLOv10 swap — benched, regressed on this dataset (50% fewer detections). Kept yolov8s.
+- Doorbell `cameras.yaml` — needs USB-C confirmation (see #2 above).
 
 ## Open decisions for Max (eyes-on items)
 
-_(populated when a task hits a fork I can't take alone)_
+(See "What needs your eyes" in the TL;DR above.)
 
 ## Things I deliberately did NOT touch
 
