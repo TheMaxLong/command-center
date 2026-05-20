@@ -63,6 +63,10 @@ cameras:
     capture_duration: 6       # seconds of video to capture on motion
     cooldown:         600     # seconds before capturing again
     motion_confirm:   1       # one confirmed wake poll; slower polling needs this
+    # audio_events:   false   # YAMNet sound classification (bark, glass-break, sirens, etc.)
+                               # Default: false (opt-in). Set to true to enable.
+                               # No speech transcription; compliant with CA two-party consent.
+                               # Requires door signage: "AUDIO + VIDEO RECORDING IN PROGRESS"
 
 
   # ── Additional Tapo camera (D230, C310, etc.) ──────────────────

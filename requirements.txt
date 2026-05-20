@@ -8,3 +8,12 @@ numpy>=1.24
 
 # License plate OCR (lazy-loaded, optional)
 easyocr>=1.7
+
+# Audio event classification (YAMNet + Silero-VAD)
+# Note: TensorFlow is large (~500MB base). torch is added for silero-vad.
+tensorflow>=2.13
+tensorflow-hub>=0.14
+torch>=2.0
+torchaudio>=2.0
+librosa>=0.10  # audio loading helper
+scipy>=1.10  # fallback audio loading
