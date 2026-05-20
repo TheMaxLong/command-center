@@ -1304,6 +1304,16 @@ class Handler(BaseHTTPRequestHandler):
         elif p == "/feeds/aqi":
             self._json(intel_feeds.get_aqi_summary())
 
+        # /feeds/lightning    → Blitzortung lightning strikes (real-time MQTT)
+        # Subscribes lazily on first request. Filtered to LIGHTNING_RADIUS_KM (default 50km).
+        elif p == "/feeds/lightning":
+            strikes = intel_feeds.get_lightning_recent()
+            self._json({
+                "items":   strikes,
+                "summary": intel_feeds.lightning_summary(),
+                "count":   len(strikes),
+            })
+
         # /feeds/plates       → LPR plate log
         elif p == "/feeds/plates":
             camera = qp("camera")

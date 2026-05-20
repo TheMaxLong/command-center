@@ -647,6 +647,160 @@ def get_citizen_incidents() -> list[dict]:
     return [i.to_dict() for i in _cache_citizen.get()]
 
 
+# ── Blitzortung lightning (MQTT, real-time) ─────────────────────────
+#
+# Subscribes to the community Blitzortung MQTT proxy used by the popular HA
+# integration (mrk-its/homeassistant-blitzortung). Each strike message is a
+# JSON object with lat/lon/mds/time. We compute distance via haversine and
+# drop anything outside LIGHTNING_RADIUS_KM. Strikes within the radius are
+# kept in a rolling deque (1h window) and exposed via get_lightning_recent().
+#
+# Background thread starts on first call. If paho-mqtt is missing or the
+# broker is unreachable, the function returns an empty list — graceful no-op.
+
+from collections import deque
+import threading as _th
+
+LIGHTNING_RADIUS_KM = float(os.environ.get("LIGHTNING_RADIUS_KM", "50"))
+_LIGHTNING_BROKER = os.environ.get("LIGHTNING_MQTT_HOST", "blitzortung.ha.sed.pl")
+_LIGHTNING_PORT   = int(os.environ.get("LIGHTNING_MQTT_PORT", "1883"))
+# Geohash precision controls subscription breadth. Precision 2 ("9q" for SoCal)
+# covers ~1250km × 625km — plenty wide. We filter in code.
+_LIGHTNING_GEOHASH_PRECISION = int(os.environ.get("LIGHTNING_GEOHASH_PRECISION", "2"))
+
+_lightning_strikes: deque = deque(maxlen=500)
+_lightning_lock     = _th.Lock()
+_lightning_thread: Optional[_th.Thread] = None
+_lightning_started  = False
+_lightning_status: dict = {"connected": False, "last_message_ts": None, "subscribed_topic": None, "error": None}
+
+
+def _geohash_encode(lat: float, lon: float, precision: int = 8) -> str:
+    """Inline geohash encoder — base32, 5 bits/char. No external dep."""
+    base32 = "0123456789bcdefghjkmnpqrstuvwxyz"
+    lat_lo, lat_hi = -90.0, 90.0
+    lon_lo, lon_hi = -180.0, 180.0
+    bit, ch_bits, out = 0, 0, []
+    even = True
+    while len(out) < precision:
+        if even:
+            mid = (lon_lo + lon_hi) / 2
+            if lon >= mid: ch_bits |= (1 << (4 - bit)); lon_lo = mid
+            else: lon_hi = mid
+        else:
+            mid = (lat_lo + lat_hi) / 2
+            if lat >= mid: ch_bits |= (1 << (4 - bit)); lat_lo = mid
+            else: lat_hi = mid
+        even = not even
+        bit += 1
+        if bit == 5:
+            out.append(base32[ch_bits])
+            bit, ch_bits = 0, 0
+    return "".join(out)
+
+
+def _start_lightning_mqtt() -> None:
+    """Start the MQTT subscriber in a daemon thread. Idempotent."""
+    global _lightning_started, _lightning_thread
+    if _lightning_started:
+        return
+    _lightning_started = True
+
+    try:
+        import paho.mqtt.client as mqtt  # noqa: F401
+    except ImportError as e:
+        _lightning_status["error"] = f"paho-mqtt not installed: {e}"
+        return
+
+    def _run() -> None:
+        import paho.mqtt.client as mqtt
+        gh = _geohash_encode(HOME_LAT, HOME_LON, _LIGHTNING_GEOHASH_PRECISION)
+        topic = f"blitzortung/1.1/{'/'.join(gh)}/#"
+        _lightning_status["subscribed_topic"] = topic
+
+        def on_connect(client, userdata, flags, rc, properties=None):
+            if rc == 0:
+                _lightning_status["connected"] = True
+                _lightning_status["error"] = None
+                client.subscribe(topic, qos=0)
+            else:
+                _lightning_status["error"] = f"connect rc={rc}"
+
+        def on_disconnect(client, userdata, *args, **kwargs):
+            _lightning_status["connected"] = False
+
+        def on_message(client, userdata, msg):
+            try:
+                payload = json.loads(msg.payload.decode("utf-8", errors="ignore"))
+                lat = float(payload.get("lat"))
+                lon = float(payload.get("lon"))
+            except (ValueError, TypeError, json.JSONDecodeError):
+                return
+            dist = _haversine_km(HOME_LAT, HOME_LON, lat, lon)
+            if dist > LIGHTNING_RADIUS_KM:
+                return
+            strike = {
+                "lat": lat,
+                "lon": lon,
+                "distance_km": round(dist, 1),
+                "ts": payload.get("time", time.time() * 1e9) / 1e9 if payload.get("time", 0) > 1e15 else (payload.get("time") or time.time()),
+                "mds": payload.get("mds"),
+            }
+            with _lightning_lock:
+                _lightning_strikes.append(strike)
+            _lightning_status["last_message_ts"] = time.time()
+
+        try:
+            client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"palm-command-{int(time.time())}")
+        except (AttributeError, TypeError):
+            # paho-mqtt < 2.x doesn't have CallbackAPIVersion
+            client = mqtt.Client(client_id=f"palm-command-{int(time.time())}")
+        client.on_connect = on_connect
+        client.on_disconnect = on_disconnect
+        client.on_message = on_message
+
+        try:
+            client.connect(_LIGHTNING_BROKER, _LIGHTNING_PORT, keepalive=60)
+            client.loop_forever()
+        except Exception as e:
+            _lightning_status["error"] = f"connect_failed: {e}"
+            _lightning_status["connected"] = False
+
+    _lightning_thread = _th.Thread(target=_run, name="blitzortung-mqtt", daemon=True)
+    _lightning_thread.start()
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def get_lightning_recent(max_age_seconds: int = 3600) -> list[dict]:
+    """Return strikes from the last hour, newest first. Starts MQTT on first call."""
+    _start_lightning_mqtt()
+    now = time.time()
+    cutoff = now - max_age_seconds
+    with _lightning_lock:
+        recent = [s for s in _lightning_strikes if (s.get("ts") or 0) >= cutoff]
+    recent.sort(key=lambda s: s.get("ts") or 0, reverse=True)
+    return recent
+
+
+def lightning_summary() -> dict:
+    """One-line dashboard summary."""
+    strikes = get_lightning_recent()
+    return {
+        "source": "Blitzortung",
+        "strike_count": len(strikes),
+        "nearest_distance_km": min((s["distance_km"] for s in strikes), default=None),
+        "last_strike_ts": (strikes[0]["ts"] if strikes else None),
+        "mqtt_status": dict(_lightning_status),
+    }
+
+
 # ── Combined Feed ─────────────────────────────────────────────────
 
 _all_cache:   list[dict] = []
