@@ -11,3 +11,13 @@ easyocr>=1.7
 
 # External intelligence feeds
 paho-mqtt>=1.6  # Blitzortung MQTT broker support
+
+# Audio event classification (YAMNet + Silero-VAD)
+# Adds ~2.6 GB to the container image. Only loaded when audio_events: true
+# is set on a camera in cameras.yaml.
+tensorflow>=2.13
+tensorflow-hub>=0.14
+torch>=2.0
+torchaudio>=2.0
+librosa>=0.10
+scipy>=1.10

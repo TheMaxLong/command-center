@@ -394,7 +394,12 @@ def _filter_exclusions(cam_id: str, detections: list[dict], snap_path: Optional[
 def media_path(cam_id: str, kind: str) -> Path:
     d = MEDIA_DIR / cam_id
     d.mkdir(parents=True, exist_ok=True)
-    ext = "mp4" if kind == "clip" else "jpg"
+    if kind == "clip":
+        ext = "mp4"
+    elif kind == "audio":
+        ext = "wav"
+    else:
+        ext = "jpg"  # snap, etc.
     return d / f"{kind}.{ext}"
 
 
@@ -458,9 +463,17 @@ def _run_ai_and_store(
     event_ts: float,
     clip_path: Optional[str],
     snap_path: Optional[str],
+    audio_enabled: bool = False,
+    cam_cfg: Optional[dict] = None,
 ) -> None:
-    """Run AI on snapshot, persist event + detections. Called in a daemon thread."""
+    """Run AI on snapshot + optional audio, persist event + detections. Called in a daemon thread."""
     detections: list[dict] = []
+
+    # Extract and classify audio if enabled
+    audio_wav = None
+    if audio_enabled and clip_path:
+        audio_wav = _extract_audio_wav(clip_path, cam_id)
+        _process_audio_events(cam_id, event_ts, audio_wav, audio_enabled)
     if snap_path and Path(snap_path).exists():
         detections = ai_engine.detect(snap_path)
         detections = _filter_exclusions(cam_id, detections, snap_path)
@@ -645,12 +658,58 @@ def _run_ai_and_store(
         print(f"[{ts_str}] [{cam_id}] {summary}", flush=True)
 
 
-def _fire_ai(cam_id: str, event_ts: float, clip_ok: bool, snap_ok: bool) -> None:
+def _extract_audio_wav(clip_path: Optional[str], cam_id: str) -> Optional[Path]:
+    """Extract audio from MP4 clip as WAV. Returns Path to WAV or None on failure."""
+    if not clip_path or not Path(clip_path).exists():
+        return None
+    try:
+        wav = media_path(cam_id, "audio")
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", clip_path,
+             "-q:a", "9", "-ac", "1", "-ar", "16000",
+             "-f", "wav", str(wav)],
+            capture_output=True, timeout=30,
+        )
+        if wav.exists() and wav.stat().st_size > 1000:
+            return wav
+    except Exception as e:
+        print(f"[audio] extraction failed for {cam_id}: {e}", flush=True)
+    return None
+
+
+def _process_audio_events(
+    cam_id: str,
+    event_ts: float,
+    audio_wav_path: Optional[Path],
+    config_enabled: bool,
+) -> None:
+    """Classify audio events and insert into DB (gated by config flag)."""
+    if not config_enabled or not audio_wav_path or not audio_wav_path.exists():
+        return
+    try:
+        import audio_engine
+        events = audio_engine.classify_audio(audio_wav_path)
+        for evt in events:
+            event_db.insert_audio_event(
+                camera_id=cam_id,
+                ts=event_ts + evt["start_s"],  # adjust to actual event time
+                class_name=evt["class_name"],
+                confidence=evt["confidence"],
+                audio_clip_path=str(audio_wav_path),
+            )
+        if events:
+            print(f"[{cam_id}] logged {len(events)} audio events", flush=True)
+    except Exception as e:
+        print(f"[audio] classification failed for {cam_id}: {e}", flush=True)
+
+
+def _fire_ai(cam_id: str, event_ts: float, clip_ok: bool, snap_ok: bool, cam_cfg: Optional[dict] = None) -> None:
     clip_p = str(media_path(cam_id, "clip")) if clip_ok else None
     snap_p = str(media_path(cam_id, "snap")) if snap_ok else None
+    audio_enabled = cam_cfg.get("audio_events", False) if cam_cfg else False
     threading.Thread(
         target=_run_ai_and_store,
-        args=(cam_id, event_ts, clip_p, snap_p),
+        args=(cam_id, event_ts, clip_p, snap_p, audio_enabled, cam_cfg),
         daemon=True,
     ).start()
 
@@ -751,7 +810,7 @@ async def tapo_poll_loop(cam_cfg: dict) -> None:
                         clip_ok, snap_ok = await _tapo_capture(cfg, cid)
                         if clip_ok or snap_ok:
                             state.last_mode = "clip" if clip_ok else "snap"
-                            _fire_ai(cid, event_ts, clip_ok, snap_ok)
+                            _fire_ai(cid, event_ts, clip_ok, snap_ok, cam_cfg=cfg)
                         last_cap = time.time()
                     finally:
                         capturing    = False
@@ -1179,6 +1238,21 @@ class Handler(BaseHTTPRequestHandler):
             camera = qp("camera")
             limit  = int(qp("limit") or 50)
             self._json(event_db.get_recent_events(camera, limit))
+
+        # /audio-events[?camera=&limit=&since=]  — YAMNet sound event log
+        elif p == "/audio-events":
+            camera = qp("camera")
+            limit  = int(qp("limit") or 50)
+            since_str = qp("since")
+            since = None
+            if since_str:
+                try:
+                    from datetime import datetime, timezone
+                    since = datetime.fromisoformat(since_str.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    pass
+            events = event_db.get_audio_events(camera, since, limit)
+            self._json({"events": events, "count": len(events)})
 
         # /trends[?camera=&weeks=]  — now uses full trend_analyzer
         elif p == "/trends":

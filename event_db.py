@@ -111,6 +111,19 @@ def init_db() -> None:
             );
             CREATE INDEX IF NOT EXISTS idx_ms_ts ON manual_scans(timestamp);
 
+            -- audio_events: YAMNet sound event classification (no recording, no transcription)
+            CREATE TABLE IF NOT EXISTS audio_events (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                camera_id       TEXT    NOT NULL,
+                ts              REAL    NOT NULL,
+                class_name      TEXT    NOT NULL,
+                confidence      REAL    NOT NULL,
+                audio_clip_path TEXT,
+                created_at      TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_audio_camera_ts ON audio_events(camera_id, ts);
+            CREATE INDEX IF NOT EXISTS idx_audio_ts        ON audio_events(ts);
+
             -- Migration: add instance column to detections if missing
             -- (safe to run on existing databases)
         """)
@@ -533,3 +546,54 @@ def get_manual_scans(limit: int = 50) -> dict:
         if s["fbi_match"] is not None:
             s["fbi_match"] = bool(s["fbi_match"])
     return {"scans": scans, "count": len(scans)}
+
+
+# ── Audio Events (YAMNet sound classification) ────────────────────
+
+def insert_audio_event(
+    camera_id: str,
+    ts: float,
+    class_name: str,
+    confidence: float,
+    audio_clip_path: Optional[str] = None,
+) -> int:
+    """Insert a classified audio event (no speech recording, just YAMNet label)."""
+    dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+    with _conn() as c:
+        cur = c.execute(
+            "INSERT INTO audio_events "
+            "(camera_id, ts, class_name, confidence, audio_clip_path, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (camera_id, ts, class_name, confidence, audio_clip_path, dt.isoformat()),
+        )
+        return cur.lastrowid
+
+
+def get_audio_events(
+    camera_id: Optional[str] = None,
+    since: Optional[float] = None,
+    limit: int = 100,
+) -> list[dict]:
+    """Fetch recent audio events, optionally filtered by camera and timestamp."""
+    q = (
+        "SELECT id, camera_id, ts, class_name, confidence, "
+        "audio_clip_path, created_at FROM audio_events "
+    )
+    params: list = []
+
+    filters = []
+    if camera_id:
+        filters.append("camera_id = ?")
+        params.append(camera_id)
+    if since is not None:
+        filters.append("ts >= ?")
+        params.append(since)
+
+    if filters:
+        q += "WHERE " + " AND ".join(filters) + " "
+
+    q += "ORDER BY ts DESC LIMIT ?"
+    params.append(limit)
+
+    with _conn() as c:
+        return [dict(r) for r in c.execute(q, params)]

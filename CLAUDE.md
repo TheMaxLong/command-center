@@ -110,6 +110,10 @@ Each camera type gets its own asyncio task:
   poll_interval: 3     # seconds between TCP probes
   capture_duration: 8  # seconds of video per trigger
   cooldown: 300        # seconds before re-triggering
+  audio_events: false  # YAMNet sound classification (dog bark, glass break, sirens, alarms)
+                       # OPT-IN ONLY. Default: false. Set to true to enable.
+                       # Classifies events, does NOT record or transcribe speech (CA two-party compliant).
+                       # Requires door signage before enabling in production.
   exclusion_zones:     # drop detections entirely (normalized 0.0–1.0 coords)
     - label: "tree"
       x1: 0.3  y1: 0.0  x2: 0.7  y2: 0.6
