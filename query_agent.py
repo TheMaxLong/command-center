@@ -116,6 +116,23 @@ def _init_llm():
         except ImportError:
             pass
 
+    # Ollama fallback — local LLM via host.docker.internal:11434 (no keys).
+    # Probe /api/tags; if it responds, we're good.
+    import urllib.error
+    import urllib.request
+    ollama_url = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
+    try:
+        req = urllib.request.Request(f"{ollama_url}/api/tags")
+        with urllib.request.urlopen(req, timeout=2) as r:
+            tags = json.loads(r.read())
+            if tags.get("models"):
+                _LLM_CLIENT   = ollama_url   # store URL, not a client object
+                _LLM_PROVIDER = "ollama"
+                print(f"[agent] LLM: Ollama backend at {ollama_url}", flush=True)
+                return True
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
+        pass
+
     _LLM_CLIENT = False   # mark as "no LLM"
     return False
 
@@ -152,6 +169,27 @@ def _llm_query(question: str, context: str) -> Optional[str]:
                 messages=[{"role": "user", "content": prompt}],
             )
             return resp.content[0].text
+        elif _LLM_PROVIDER == "ollama":
+            import urllib.request
+            import re as _re
+            model = os.environ.get("OLLAMA_AGENT_MODEL", "gemma4:e4b")
+            body = json.dumps({
+                "model": model,
+                "system": system,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.3, "num_predict": 800},
+            }).encode()
+            req = urllib.request.Request(
+                f"{_LLM_CLIENT}/api/generate",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=60) as r:
+                data = json.loads(r.read())
+            raw = data.get("response", "") or ""
+            # Strip qwen3-style <think>...</think> blocks.
+            return _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip() or None
     except Exception as e:
         print(f"[agent] LLM error: {e}", flush=True)
     return None
@@ -1173,7 +1211,7 @@ def _handle_general(text: str, camera_id: Optional[str]) -> dict:
         return {"intent": "general", "answer": llm, "data": {}}
     return {
         "intent":  "general",
-        "answer":  "▸ Command not recognised. Type 'help' for available queries.\n▸ Tip: set OPENAI_API_KEY for natural language understanding.",
+        "answer":  "▸ Command not recognised. Type 'help' for available queries.\n▸ Tip: start Ollama (local) or set OPENAI_API_KEY / ANTHROPIC_API_KEY.",
         "data":    {}
     }
 
