@@ -1338,6 +1338,55 @@
       content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
       background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);
     }
+    /* ── Threat-Pulse: ambient peripheral breathing (2026-05-20) ── */
+    /* Viewport edges glow softly with the current aggregate threat tier
+       pulled from /api/feeds. Low-light operator friendly — low saturation,
+       no flashbangs even at RED. Peripheral, not central. */
+    #threat-pulse {
+      position: fixed; inset: 0; pointer-events: none; z-index: 8500;
+      box-shadow: inset 0 0 0 0 transparent;
+      transition: box-shadow 800ms ease;
+    }
+    html[data-threat-tier="GREEN"]  #threat-pulse { animation: tp-breathe-green  4.0s ease-in-out infinite; }
+    html[data-threat-tier="YELLOW"] #threat-pulse { animation: tp-breathe-yellow 2.2s ease-in-out infinite; }
+    html[data-threat-tier="ORANGE"] #threat-pulse { animation: tp-breathe-orange 1.4s ease-in-out infinite; }
+    html[data-threat-tier="RED"]    #threat-pulse { animation: tp-breathe-red    0.85s ease-in-out infinite; }
+    @keyframes tp-breathe-green {
+      0%, 100% { box-shadow: inset 0 0 32px -8px rgba(0, 184, 217, 0.05); }
+      50%      { box-shadow: inset 0 0 48px -8px rgba(0, 184, 217, 0.16); }
+    }
+    @keyframes tp-breathe-yellow {
+      0%, 100% { box-shadow: inset 0 0 40px -8px rgba(232, 178, 30, 0.10); }
+      50%      { box-shadow: inset 0 0 64px -4px rgba(232, 178, 30, 0.28); }
+    }
+    @keyframes tp-breathe-orange {
+      0%, 100% { box-shadow: inset 0 0 48px -6px rgba(217, 119, 6, 0.15); }
+      50%      { box-shadow: inset 0 0 80px -2px rgba(217, 119, 6, 0.38); }
+    }
+    @keyframes tp-breathe-red {
+      0%, 100% { box-shadow: inset 0 0 56px -4px rgba(220, 38, 38, 0.22); }
+      50%      { box-shadow: inset 0 0 96px  2px rgba(220, 38, 38, 0.50); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html[data-threat-tier] #threat-pulse {
+        animation: none;
+        box-shadow: inset 0 0 64px -8px rgba(217, 119, 6, 0.18);
+      }
+    }
+    #threat-tier-badge {
+      position: fixed; top: 6px; right: 8px; z-index: 8600;
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      font-size: 8px; letter-spacing: 2px; padding: 2px 6px;
+      border: 1px solid currentColor;
+      border-radius: 2px; opacity: 0.55;
+      transition: opacity 200ms;
+    }
+    #threat-tier-badge:hover { opacity: 1; }
+    html[data-threat-tier="GREEN"]  #threat-tier-badge { color: rgba(0, 184, 217, 0.85); }
+    html[data-threat-tier="YELLOW"] #threat-tier-badge { color: rgba(232, 178, 30, 0.85); }
+    html[data-threat-tier="ORANGE"] #threat-tier-badge { color: rgba(217, 119, 6, 0.95); }
+    html[data-threat-tier="RED"]    #threat-tier-badge { color: rgba(220, 38, 38, 1); }
+
     /* ── Clermont-style status ticker (PLAN 2.16) ── */
     #status-ticker {
       position: fixed; left: 0; right: 0; bottom: 0; height: 22px;
@@ -4411,8 +4460,30 @@ async function refreshStatusTicker() {
 }
 refreshStatusTicker();
 setInterval(refreshStatusTicker, 30000);
+
+// ── Threat-Pulse: refresh tier from /api/feeds every 60s ────────────
+async function refreshThreatTier() {
+  try {
+    const r = await fetch('/api/feeds');
+    if (!r.ok) return;
+    const d = await r.json();
+    const tier = (d.threat_level || 'GREEN').toUpperCase();
+    if (!['GREEN','YELLOW','ORANGE','RED'].includes(tier)) return;
+    document.documentElement.setAttribute('data-threat-tier', tier);
+    const badge = document.getElementById('threat-tier-badge');
+    if (badge) {
+      const label = (d.threat_label || tier);
+      badge.textContent = `THREAT · ${tier}`;
+      badge.title = label;
+    }
+  } catch {}
+}
+refreshThreatTier();
+setInterval(refreshThreatTier, 60000);
 </script>
 
+<div id="threat-pulse"></div>
+<div id="threat-tier-badge">THREAT · …</div>
 <div id="status-ticker"><div id="status-ticker-track">PALM COMMAND · initializing telemetry...</div></div>
 
 </body>
