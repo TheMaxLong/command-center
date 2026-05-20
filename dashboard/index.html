@@ -1416,6 +1416,14 @@
     }
     #lightning-globe .lg-count { color: rgba(232, 178, 30, 0.95); }
     #lightning-globe svg { width: 100%; height: 100%; display: block; }
+    .lg-coast {
+      fill: none;
+      stroke: rgba(0, 184, 217, 0.22);
+      stroke-width: 0.4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
     .lg-strike {
       fill: rgba(255, 220, 90, 1);
       filter: drop-shadow(0 0 4px rgba(255, 220, 90, 0.95));
@@ -4753,8 +4761,33 @@ maybeShowArrivalBanner();
 // ── Lightning Globe ────────────────────────────────────────────────
 const LG_HOME_LAT = 33.8303;
 const LG_HOME_LON = -116.5453;
+let LG_COAST_PATH = null;
+let LG_COAST_W = 0, LG_COAST_H = 0;
 function lgProject(lat, lon, w, h) {
   return { x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h };
+}
+async function lgBuildCoastPath(w, h) {
+  if (LG_COAST_PATH && LG_COAST_W === w && LG_COAST_H === h) return LG_COAST_PATH;
+  try {
+    const r = await fetch('/coastlines.json');
+    if (!r.ok) return null;
+    const lines = await r.json();
+    const parts = [];
+    for (const line of lines) {
+      if (!line.length) continue;
+      let d = '';
+      for (let i = 0; i < line.length; i++) {
+        const lon = line[i][0], lat = line[i][1];
+        const x = ((lon + 180) / 360) * w;
+        const y = ((90 - lat) / 180) * h;
+        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+      }
+      parts.push(d);
+    }
+    LG_COAST_PATH = parts.join(' ');
+    LG_COAST_W = w; LG_COAST_H = h;
+    return LG_COAST_PATH;
+  } catch { return null; }
 }
 async function refreshLightningGlobe() {
   const root = document.getElementById('lightning-globe');
@@ -4771,6 +4804,8 @@ async function refreshLightningGlobe() {
     let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`;
     svg += `<line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>`;
     svg += `<line x1="${w/2}" y1="0" x2="${w/2}" y2="${h}" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>`;
+    const coast = await lgBuildCoastPath(w, h);
+    if (coast) svg += `<path class="lg-coast" d="${coast}"/>`;
     for (let i = 0; i < newest.length; i++) {
       const s = newest[i];
       if (typeof s.lat !== 'number' || typeof s.lon !== 'number') continue;
