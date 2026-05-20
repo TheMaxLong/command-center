@@ -25,16 +25,33 @@ import urllib.request
 from typing import Any
 
 # Default host is Mac's Ollama, reachable from inside the container.
-OLLAMA_URL  = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
-# gemma4:e4b is faster and doesn't burn tokens inside <think> blocks.
-# qwen3:14b is also installed — set OLLAMA_BRIEF_MODEL=qwen3:14b to use it
-# (and bump NUM_PREDICT to ~2000 to allow for its thinking tokens).
-OLLAMA_MODEL = os.environ.get("OLLAMA_BRIEF_MODEL", "gemma4:e4b")
-NUM_PREDICT = int(os.environ.get("BRIEF_NUM_PREDICT", "1500"))
-BRIEF_TTL   = int(os.environ.get("BRIEF_TTL", "900"))  # 15 min
+# LM Studio (preferred) — OpenAI-compat API on the Mac at :1234.
+# Container reaches the host via host.docker.internal.
+# To switch back to Ollama: set LLM_BACKEND=ollama in the env.
+LLM_BACKEND  = os.environ.get("LLM_BACKEND", "lmstudio").lower()
+LMSTUDIO_URL = os.environ.get("LMSTUDIO_URL", "http://host.docker.internal:1234")
+OLLAMA_URL   = os.environ.get("OLLAMA_URL",   "http://host.docker.internal:11434")
+# qwen3-14b in LM Studio (dash, not colon — different naming than Ollama).
+BRIEF_MODEL  = os.environ.get("BRIEF_MODEL", "qwen3-14b")
+NUM_PREDICT  = int(os.environ.get("BRIEF_NUM_PREDICT", "2500"))
+BRIEF_TTL    = int(os.environ.get("BRIEF_TTL", "900"))  # 15 min
 
 _lock = threading.Lock()
 _cache: dict = {"brief": None, "ts": 0.0, "model": None, "input_summary": None}
+
+# Persist cache to disk so container restarts don't trigger a fresh 2-minute
+# qwen generation on the next dashboard load.
+import pathlib as _pathlib
+_DISK_CACHE = _pathlib.Path("/data/brief_cache.json")
+try:
+    if _DISK_CACHE.exists():
+        with _DISK_CACHE.open() as _f:
+            _disk = json.load(_f)
+        if isinstance(_disk, dict) and _disk.get("brief"):
+            _cache.update(_disk)
+            print(f"[brief] loaded cached brief from {_DISK_CACHE} (age {int(time.time() - _disk.get('ts', 0))}s)", flush=True)
+except (OSError, json.JSONDecodeError):
+    pass
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
 
@@ -115,12 +132,37 @@ def _gather_intel() -> dict:
     return out
 
 
+def _call_lmstudio(intel: dict) -> dict:
+    """LM Studio's OpenAI-compatible /v1/chat/completions endpoint."""
+    body = json.dumps({
+        "model": BRIEF_MODEL,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": "Current snapshot to brief on:\n\n" + json.dumps(intel, indent=2, default=str)},
+        ],
+        "max_tokens":  NUM_PREDICT,
+        "temperature": 0.4,
+        "stream":      False,
+    }).encode()
+    req = urllib.request.Request(
+        f"{LMSTUDIO_URL}/v1/chat/completions",
+        data=body,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=180) as r:
+        data = json.loads(r.read())
+    # Normalize to Ollama-shape so the rest of the code doesn't care.
+    text = data["choices"][0]["message"]["content"] if data.get("choices") else ""
+    return {"response": text}
+
+
 def _call_ollama(intel: dict) -> dict:
     body = json.dumps({
-        "model": OLLAMA_MODEL,
+        "model": BRIEF_MODEL,
         "system": SYSTEM_PROMPT,
         "prompt": "Current snapshot to brief on:\n\n" + json.dumps(intel, indent=2, default=str),
         "stream": False,
+        "keep_alive": "15m",
         "options": {
             "temperature": 0.4,
             "num_predict": NUM_PREDICT,
@@ -131,8 +173,14 @@ def _call_ollama(intel: dict) -> dict:
         data=body,
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=120) as r:
+    with urllib.request.urlopen(req, timeout=180) as r:
         return json.loads(r.read())
+
+
+def _call_llm(intel: dict) -> dict:
+    if LLM_BACKEND == "ollama":
+        return _call_ollama(intel)
+    return _call_lmstudio(intel)
 
 
 def generate_morning_brief(force: bool = False) -> dict:
@@ -155,11 +203,11 @@ def generate_morning_brief(force: bool = False) -> dict:
         return {"error": "intel_feeds offline (no /feeds response)", "cached": False}
 
     try:
-        resp = _call_ollama(intel)
+        resp = _call_llm(intel)
     except (urllib.error.URLError, OSError) as e:
-        return {"error": f"ollama unreachable: {e}", "model": OLLAMA_MODEL, "cached": False}
-    except json.JSONDecodeError as e:
-        return {"error": f"ollama returned non-json: {e}", "cached": False}
+        return {"error": f"{LLM_BACKEND} unreachable: {e}", "model": BRIEF_MODEL, "backend": LLM_BACKEND, "cached": False}
+    except (json.JSONDecodeError, KeyError) as e:
+        return {"error": f"{LLM_BACKEND} returned bad response: {e}", "cached": False}
 
     raw = resp.get("response", "") or ""
     # Strip qwen3-style <think>...</think> blocks
@@ -174,11 +222,19 @@ def generate_morning_brief(force: bool = False) -> dict:
     }
 
     with _lock:
-        _cache.update({"brief": text, "ts": now, "model": OLLAMA_MODEL, "input_summary": input_summary})
+        _cache.update({"brief": text, "ts": now, "model": BRIEF_MODEL, "input_summary": input_summary})
+    # Persist to disk so restarts don't kill the cache.
+    try:
+        _DISK_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        with _DISK_CACHE.open("w") as _f:
+            json.dump({"brief": text, "ts": now, "model": BRIEF_MODEL, "input_summary": input_summary}, _f)
+    except OSError:
+        pass
 
     return {
         "brief": text,
-        "model": OLLAMA_MODEL,
+        "model": BRIEF_MODEL,
+        "backend": LLM_BACKEND,
         "generated_at": now,
         "ttl_remaining": BRIEF_TTL,
         "input_summary": input_summary,

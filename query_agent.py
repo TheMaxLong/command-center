@@ -89,51 +89,79 @@ _LLM_CLIENT   = None
 _LLM_PROVIDER = None
 
 def _init_llm():
+    """Local-first LLM probe. Order:
+       1. LM Studio (preferred — running models loaded in the GUI, no keys)
+       2. Ollama (alternate local — qwen3:14b etc.)
+       3. OpenAI / Anthropic (paid — only if PALM_ALLOW_PAID_LLM=1)
+    Set LLM_BACKEND to force a specific provider (lmstudio | ollama |
+    openai | anthropic).
+    """
     global _LLM_CLIENT, _LLM_PROVIDER
     if _LLM_CLIENT is not None:
         return _LLM_CLIENT is not False
 
-    oai_key = os.environ.get("OPENAI_API_KEY", "")
-    ant_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
-    if oai_key:
-        try:
-            from openai import OpenAI
-            _LLM_CLIENT   = OpenAI(api_key=oai_key)
-            _LLM_PROVIDER = "openai"
-            print("[agent] LLM: OpenAI backend", flush=True)
-            return True
-        except ImportError:
-            pass
-
-    if ant_key:
-        try:
-            import anthropic
-            _LLM_CLIENT   = anthropic.Anthropic(api_key=ant_key)
-            _LLM_PROVIDER = "anthropic"
-            print("[agent] LLM: Anthropic backend", flush=True)
-            return True
-        except ImportError:
-            pass
-
-    # Ollama fallback — local LLM via host.docker.internal:11434 (no keys).
-    # Probe /api/tags; if it responds, we're good.
     import urllib.error
     import urllib.request
-    ollama_url = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
-    try:
-        req = urllib.request.Request(f"{ollama_url}/api/tags")
-        with urllib.request.urlopen(req, timeout=2) as r:
-            tags = json.loads(r.read())
-            if tags.get("models"):
-                _LLM_CLIENT   = ollama_url   # store URL, not a client object
-                _LLM_PROVIDER = "ollama"
-                print(f"[agent] LLM: Ollama backend at {ollama_url}", flush=True)
-                return True
-    except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
-        pass
 
-    _LLM_CLIENT = False   # mark as "no LLM"
+    forced = (os.environ.get("LLM_BACKEND") or "").lower().strip()
+    allow_paid = os.environ.get("PALM_ALLOW_PAID_LLM", "").lower() in ("1", "true", "yes")
+
+    # 1) LM Studio (OpenAI-compatible) on the Mac at :1234
+    if forced in ("", "lmstudio"):
+        lms_url = os.environ.get("LMSTUDIO_URL", "http://host.docker.internal:1234")
+        try:
+            req = urllib.request.Request(f"{lms_url}/v1/models")
+            with urllib.request.urlopen(req, timeout=2) as r:
+                d = json.loads(r.read())
+                if d.get("data"):
+                    _LLM_CLIENT   = lms_url
+                    _LLM_PROVIDER = "lmstudio"
+                    print(f"[agent] LLM: LM Studio at {lms_url}", flush=True)
+                    return True
+        except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
+            pass
+
+    # 2) Ollama as the local backup
+    if forced in ("", "ollama"):
+        ollama_url = os.environ.get("OLLAMA_URL", "http://host.docker.internal:11434")
+        try:
+            req = urllib.request.Request(f"{ollama_url}/api/tags")
+            with urllib.request.urlopen(req, timeout=2) as r:
+                tags = json.loads(r.read())
+                if tags.get("models"):
+                    _LLM_CLIENT   = ollama_url
+                    _LLM_PROVIDER = "ollama"
+                    print(f"[agent] LLM: Ollama at {ollama_url}", flush=True)
+                    return True
+        except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
+            pass
+
+    # 3) Paid APIs — opt-in only. Set PALM_ALLOW_PAID_LLM=1 to allow.
+    # Without that env, having OPENAI_API_KEY or ANTHROPIC_API_KEY lying
+    # around in the env will NOT silently spend money.
+    if allow_paid:
+        oai_key = os.environ.get("OPENAI_API_KEY", "")
+        ant_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if oai_key and forced in ("", "openai"):
+            try:
+                from openai import OpenAI
+                _LLM_CLIENT   = OpenAI(api_key=oai_key)
+                _LLM_PROVIDER = "openai"
+                print("[agent] LLM: OpenAI (paid) — explicitly enabled", flush=True)
+                return True
+            except ImportError:
+                pass
+        if ant_key and forced in ("", "anthropic"):
+            try:
+                import anthropic
+                _LLM_CLIENT   = anthropic.Anthropic(api_key=ant_key)
+                _LLM_PROVIDER = "anthropic"
+                print("[agent] LLM: Anthropic (paid) — explicitly enabled", flush=True)
+                return True
+            except ImportError:
+                pass
+
+    _LLM_CLIENT = False
     return False
 
 
@@ -169,26 +197,53 @@ def _llm_query(question: str, context: str) -> Optional[str]:
                 messages=[{"role": "user", "content": prompt}],
             )
             return resp.content[0].text
+        elif _LLM_PROVIDER == "lmstudio":
+            import urllib.request
+            import re as _re
+            # LM Studio model name uses dashes: qwen3-14b
+            model = os.environ.get("AGENT_MODEL", "qwen3-14b")
+            num_predict = 2000 if "qwen" in model else 800
+            body = json.dumps({
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user",   "content": prompt},
+                ],
+                "max_tokens": num_predict,
+                "temperature": 0.3,
+                "stream": False,
+            }).encode()
+            req = urllib.request.Request(
+                f"{_LLM_CLIENT}/v1/chat/completions",
+                data=body,
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req, timeout=180) as r:
+                data = json.loads(r.read())
+            raw = (data.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+            return _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip() or None
+
         elif _LLM_PROVIDER == "ollama":
             import urllib.request
             import re as _re
-            model = os.environ.get("OLLAMA_AGENT_MODEL", "gemma4:e4b")
+            model = os.environ.get("AGENT_MODEL", "qwen3:14b")
+            num_predict = 2000 if "qwen" in model else 800
             body = json.dumps({
                 "model": model,
                 "system": system,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": 0.3, "num_predict": 800},
+                "keep_alive": os.environ.get("OLLAMA_KEEP_ALIVE", "15m"),
+                "options": {"temperature": 0.3, "num_predict": num_predict},
             }).encode()
             req = urllib.request.Request(
                 f"{_LLM_CLIENT}/api/generate",
                 data=body,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=180) as r:
                 data = json.loads(r.read())
             raw = data.get("response", "") or ""
-            # Strip qwen3-style <think>...</think> blocks.
             return _re.sub(r"<think>.*?</think>", "", raw, flags=_re.DOTALL).strip() or None
     except Exception as e:
         print(f"[agent] LLM error: {e}", flush=True)
