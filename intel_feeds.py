@@ -379,6 +379,126 @@ def get_fire_incidents() -> list[dict]:
     return [i.to_dict() for i in _cache_fire.get()]
 
 
+# ── PurpleAir API (AQI mesh) ─────────────────────────────────────
+#
+# Blitzortung (PLAN 2.10) and CA Power Outages (PLAN 2.12) were drafted in the
+# 2026-05-19 overnight pass but shipped as non-functional stubs (dead REST URL
+# / no usable free API). Stripped to keep this module honest. To re-attempt:
+#   - Blitzortung: subscribe to MQTT `blitzortung.ha.sed.pl` via paho-mqtt
+#     (already in requirements.txt) in a background thread.
+#   - CA outages: scrape SDGE outage map or wait for a public REST tier.
+
+_cache_aqi = _Cache()
+TTL_AQI = 600  # 10 min — air quality is slow-moving
+
+_PURPLEAIR_API_KEY = os.environ.get("PURPLEAIR_API_KEY", "")
+_PURPLEAIR_URL = "https://api.purpleair.com/v1/sensors"
+_last_aqi_result: dict = {"status": "uninitialized", "ts": 0}
+
+def fetch_aqi_summary() -> dict:
+    """
+    Fetch PurpleAir AQI sensors within ~5km bounding box of home.
+    Free tier: requires free API key from https://develop.purpleair.com/
+
+    Returns: {median_aqi, max_aqi, sensor_count, ts, status}
+    """
+    if not _PURPLEAIR_API_KEY:
+        return {
+            "error": "PURPLEAIR_API_KEY not set",
+            "median_aqi": None,
+            "max_aqi": None,
+            "sensor_count": 0,
+            "status": "unconfigured",
+            "ts": time.time(),
+        }
+
+    # Bounding box: ~5km = ~0.045 degrees lat/lon
+    bbox_deg = 0.045
+    params = (
+        f"?api_key={_PURPLEAIR_API_KEY}"
+        f"&nwlat={HOME_LAT + bbox_deg}&nwlng={HOME_LON - bbox_deg}"
+        f"&selat={HOME_LAT - bbox_deg}&selng={HOME_LON + bbox_deg}"
+        f"&fields=name,latitude,longitude,pm2_5_60minute"
+    )
+    url = _PURPLEAIR_URL + params
+    data = _fetch(url, timeout=10)
+
+    if not data or isinstance(data, dict) and data.get("error"):
+        return {
+            "error": str(data.get("error", "API error")) if isinstance(data, dict) else "API unreachable",
+            "median_aqi": None,
+            "max_aqi": None,
+            "sensor_count": 0,
+            "status": "error",
+            "ts": time.time(),
+        }
+
+    sensors = data.get("data", []) if isinstance(data, dict) else []
+    if not sensors:
+        return {
+            "median_aqi": None,
+            "max_aqi": None,
+            "sensor_count": 0,
+            "status": "no sensors in zone",
+            "ts": time.time(),
+        }
+
+    # Extract AQI values (PurpleAir PM2.5 → rough AQI conversion)
+    # US EPA AQI: 0-50 (Good), 51-100 (Moderate), 101-150 (USG), 151-200 (Unhealthy), 200+ (Very Unhealthy)
+    pm25_values = []
+    for s in sensors:
+        if isinstance(s, list) and len(s) > 3:
+            pm25 = s[3]  # pm2_5_60minute field
+            if pm25 is not None and isinstance(pm25, (int, float)):
+                pm25_values.append(float(pm25))
+
+    if not pm25_values:
+        return {
+            "median_aqi": None,
+            "max_aqi": None,
+            "sensor_count": len(sensors),
+            "status": "no pm2.5 data",
+            "ts": time.time(),
+        }
+
+    # Simple PM2.5 to AQI estimate (EPA formula simplified)
+    def pm25_to_aqi(pm25):
+        if pm25 <= 12:
+            return pm25 * 50 / 12
+        elif pm25 <= 35.4:
+            return 50 + (pm25 - 12) * 50 / 23.4
+        elif pm25 <= 55.4:
+            return 100 + (pm25 - 35.4) * 50 / 20
+        elif pm25 <= 150.4:
+            return 150 + (pm25 - 55.4) * 50 / 95
+        elif pm25 <= 250.4:
+            return 200 + (pm25 - 150.4) * 50 / 100
+        else:
+            return 300 + (pm25 - 250.4) * 50 / 100
+
+    aqi_values = [pm25_to_aqi(pm) for pm in pm25_values]
+    aqi_values.sort()
+    median_aqi = aqi_values[len(aqi_values) // 2]
+    max_aqi = max(aqi_values)
+
+    return {
+        "median_aqi": round(median_aqi, 1),
+        "max_aqi": round(max_aqi, 1),
+        "sensor_count": len(sensors),
+        "status": "ok",
+        "ts": time.time(),
+    }
+
+
+def get_aqi_summary() -> dict:
+    """Cached AQI summary. Re-fetches at most every TTL_AQI seconds."""
+    global _last_aqi_result
+    if _cache_aqi.stale(TTL_AQI):
+        _last_aqi_result = fetch_aqi_summary()
+        _cache_aqi.update([])  # touch cache so stale() resets the timer
+    return _last_aqi_result
+
+
 # ── Citizen App — Hyperlocal 911 Incidents ────────────────────────
 
 _CITIZEN_TRENDING = (

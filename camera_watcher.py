@@ -1225,6 +1225,11 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"items": intel_feeds.get_citizen_incidents(),
                         "count": len(intel_feeds.get_citizen_incidents())})
 
+        # /feeds/aqi          → PurpleAir air quality (median + max AQI in ~5km bbox)
+        # Requires PURPLEAIR_API_KEY env var; returns {status: "unconfigured"} if missing.
+        elif p == "/feeds/aqi":
+            self._json(intel_feeds.get_aqi_summary())
+
         # /feeds/plates       → LPR plate log
         elif p == "/feeds/plates":
             camera = qp("camera")

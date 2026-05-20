@@ -8,3 +8,6 @@ numpy>=1.24
 
 # License plate OCR (lazy-loaded, optional)
 easyocr>=1.7
+
+# External intelligence feeds
+paho-mqtt>=1.6  # Blitzortung MQTT broker support
