@@ -48,6 +48,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if self.path.rstrip("/") == "/api/local/doorbell-brightness":
             self._serve_doorbell_brightness()
             return
+        if self.path.rstrip("/") == "/api/local/operator":
+            self._serve_operator_position()
+            return
         if self.path.rstrip("/") == "/api/sentinel-digest" or self.path.startswith("/api/sentinel-digest?"):
             self._serve_sentinel_digest()
             return
@@ -119,6 +122,102 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_operator_position(self):
+        """Return operator presence + position.
+
+        Two signals fused:
+          1. Tailscale device list for `pixel-10-1` / `maxxxnaty` — if it has
+             a `direct 192.168.x.x` peer, the phone is on the LAN = operator
+             is HOME. If `active` over relay, operator is REMOTE on tailnet.
+             If `offline`, operator status unknown.
+          2. ~/Documents/hark-movement/pixel10.tsv tail — when Drop-Pin pings
+             land, we get lat/lon/accuracy/SSID. Distance from home is
+             haversine.
+        """
+        import json as _json
+        import math as _math
+        import subprocess as _subprocess
+
+        HOME_LAT, HOME_LON = 33.8303, -116.5453
+        info = {
+            "status": "unknown",
+            "label": "OPERATOR · UNKNOWN",
+            "via": None,
+            "phone_id": None,
+            "phone_addr": None,
+            "drop_pin": None,
+        }
+        try:
+            ts = _subprocess.run(
+                ["/Applications/Tailscale.app/Contents/MacOS/Tailscale", "status"],
+                capture_output=True, text=True, timeout=4,
+            ).stdout
+            for line in ts.splitlines():
+                parts = line.split()
+                if len(parts) < 5: continue
+                tip, host = parts[0], parts[1]
+                if host not in ("pixel-10-1", "maxxxnaty", "pixel-10"): continue
+                rest = " ".join(parts[4:])
+                if "offline" in rest:
+                    continue
+                info["phone_id"] = host
+                if "direct " in rest:
+                    ip_part = rest.split("direct ", 1)[1].split(",")[0].split()[0]
+                    info["phone_addr"] = ip_part
+                    if ip_part.startswith("192.168.") or ip_part.startswith("10.") or ip_part.startswith("172."):
+                        info["status"] = "home"
+                        info["label"] = "OPERATOR · HOME"
+                        info["via"] = "tailscale-lan"
+                        break
+                info["status"] = "deployed"
+                info["label"] = "OPERATOR · DEPLOYED"
+                info["via"] = "tailscale-relay"
+        except (FileNotFoundError, _subprocess.TimeoutExpired, _subprocess.SubprocessError):
+            pass
+
+        tsv = Path.home() / "Documents" / "hark-movement" / "pixel10.tsv"
+        if tsv.exists():
+            try:
+                lines = [l for l in tsv.read_text().splitlines() if l and not l.startswith("timestamp")]
+                if lines:
+                    last = lines[-1].split("\t")
+                    if len(last) >= 3:
+                        lat, lon = float(last[1]), float(last[2])
+                        R = 6371.0
+                        p1, p2 = _math.radians(HOME_LAT), _math.radians(lat)
+                        dp = _math.radians(lat - HOME_LAT)
+                        dl = _math.radians(lon - HOME_LON)
+                        a = _math.sin(dp/2)**2 + _math.cos(p1)*_math.cos(p2)*_math.sin(dl/2)**2
+                        km = 2 * R * _math.asin(_math.sqrt(a))
+                        mi = km * 0.621371
+                        info["drop_pin"] = {
+                            "ts": last[0],
+                            "lat": lat,
+                            "lon": lon,
+                            "km_from_home": round(km, 2),
+                            "mi_from_home": round(mi, 2),
+                            "accuracy_m": float(last[3]) if len(last) >= 4 and last[3] else None,
+                            "ssid": last[4] if len(last) >= 5 else None,
+                            "battery_pct": int(last[5]) if len(last) >= 6 and last[5].isdigit() else None,
+                        }
+                        if mi < 0.2:
+                            info["label"] = "OPERATOR · HOME"
+                            info["status"] = "home"
+                        else:
+                            info["label"] = f"OPERATOR · {mi:.1f} MI"
+                            info["status"] = "deployed"
+                        info["via"] = "drop-pin-gps"
+            except (OSError, ValueError, IndexError):
+                pass
+
+        body = _json.dumps(info).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _serve_doorbell_brightness(self):
         """Serve the latest doorbell-brightness-watcher state as JSON.

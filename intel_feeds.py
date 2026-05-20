@@ -663,6 +663,7 @@ _LIGHTNING_PORT   = int(os.environ.get("LIGHTNING_MQTT_PORT", "1883"))
 _LIGHTNING_GEOHASH_PRECISION = int(os.environ.get("LIGHTNING_GEOHASH_PRECISION", "2"))
 
 _lightning_strikes: deque = deque(maxlen=500)
+_lightning_global:  deque = deque(maxlen=1000)
 _lightning_lock     = _th.Lock()
 _lightning_thread: Optional[_th.Thread] = None
 _lightning_started  = False
@@ -708,8 +709,10 @@ def _start_lightning_mqtt() -> None:
 
     def _run() -> None:
         import paho.mqtt.client as mqtt
-        gh = _geohash_encode(HOME_LAT, HOME_LON, _LIGHTNING_GEOHASH_PRECISION)
-        topic = f"blitzortung/1.1/{'/'.join(gh)}/#"
+        # Subscribe to ALL strikes (global) — both caches (local radius +
+        # global view) are populated from the same stream by on_message.
+        # ~1-10 messages/second sustained, very manageable for Python.
+        topic = "blitzortung/1.1/#"
         _lightning_status["subscribed_topic"] = topic
 
         def on_connect(client, userdata, flags, rc, properties=None):
@@ -730,18 +733,21 @@ def _start_lightning_mqtt() -> None:
                 lon = float(payload.get("lon"))
             except (ValueError, TypeError, json.JSONDecodeError):
                 return
+            raw_t = payload.get("time", 0)
+            ts = raw_t / 1e9 if raw_t > 1e15 else (raw_t or time.time())
             dist = _haversine_km(HOME_LAT, HOME_LON, lat, lon)
-            if dist > LIGHTNING_RADIUS_KM:
-                return
-            strike = {
-                "lat": lat,
-                "lon": lon,
+            strike_global = {
+                "lat": lat, "lon": lon, "ts": ts,
                 "distance_km": round(dist, 1),
-                "ts": payload.get("time", time.time() * 1e9) / 1e9 if payload.get("time", 0) > 1e15 else (payload.get("time") or time.time()),
-                "mds": payload.get("mds"),
             }
             with _lightning_lock:
-                _lightning_strikes.append(strike)
+                _lightning_global.append(strike_global)
+                if dist <= LIGHTNING_RADIUS_KM:
+                    _lightning_strikes.append({
+                        "lat": lat, "lon": lon,
+                        "distance_km": round(dist, 1), "ts": ts,
+                        "mds": payload.get("mds"),
+                    })
             _lightning_status["last_message_ts"] = time.time()
 
         try:
@@ -779,6 +785,18 @@ def get_lightning_recent(max_age_seconds: int = 3600) -> list[dict]:
     cutoff = now - max_age_seconds
     with _lightning_lock:
         recent = [s for s in _lightning_strikes if (s.get("ts") or 0) >= cutoff]
+    recent.sort(key=lambda s: s.get("ts") or 0, reverse=True)
+    return recent
+
+
+def get_lightning_global(max_age_seconds: int = 600) -> list[dict]:
+    """Return all globally-received strikes from the last N seconds.
+    For the dashboard globe widget. Capped at deque maxlen (1000)."""
+    _start_lightning_mqtt()
+    now = time.time()
+    cutoff = now - max_age_seconds
+    with _lightning_lock:
+        recent = [s for s in _lightning_global if (s.get("ts") or 0) >= cutoff]
     recent.sort(key=lambda s: s.get("ts") or 0, reverse=True)
     return recent
 

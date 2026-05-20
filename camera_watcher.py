@@ -1323,6 +1323,16 @@ class Handler(BaseHTTPRequestHandler):
                 "count":   len(strikes),
             })
 
+        # /feeds/lightning-global → ALL strikes worldwide (last 10 min default)
+        # For the dashboard globe widget. Unfiltered by distance.
+        elif p == "/feeds/lightning-global":
+            try:
+                window = int(qp("seconds") or 600)
+            except ValueError:
+                window = 600
+            strikes = intel_feeds.get_lightning_global(max_age_seconds=window)
+            self._json({"items": strikes, "count": len(strikes), "window_s": window})
+
         # /feeds/plates       → LPR plate log
         elif p == "/feeds/plates":
             camera = qp("camera")
