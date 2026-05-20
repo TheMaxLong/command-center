@@ -63,7 +63,8 @@ def _get_yamnet_model():
 
 
 def _get_silero_vad():
-    """Lazy-load Silero-VAD model and utilities."""
+    """Lazy-load Silero-VAD model and utilities. Returns (None, None) on failure
+    so the caller can fall back to whole-audio classification."""
     global _silero_vad_model, _silero_utils
     if _silero_vad_model is None or _silero_utils is None:
         try:
@@ -75,13 +76,14 @@ def _get_silero_vad():
                 model="silero_vad",
                 force_reload=False,
                 onnx=False,
+                trust_repo=True,
             )
             _silero_vad_model = model
             _silero_utils = utils
             print("[audio] Silero-VAD model loaded.", flush=True)
         except Exception as e:
-            print(f"[audio] Failed to load Silero-VAD: {e}", flush=True)
-            raise
+            print(f"[audio] Silero-VAD unavailable ({e}); falling back to whole-audio YAMNet", flush=True)
+            return None, None
     return _silero_vad_model, _silero_utils
 
 
@@ -153,30 +155,39 @@ def classify_audio(
         if len(audio) == 0:
             return []
 
-        # Step 2: Voice activity detection (skip silent regions)
-        print(f"[audio] Running Silero-VAD on {wav_path.name}...", flush=True)
-        vad_model, vad_utils = _get_silero_vad()
-        (get_speech_timestamps, save_audio, read_audio) = vad_utils
-
-        # get_speech_timestamps expects audio in [-1, 1] range
-        speech_timestamps = get_speech_timestamps(
-            audio, vad_model, sampling_rate=sr, return_seconds=True
-        )
-
-        if not speech_timestamps:
-            print(f"[audio] No speech/sound activity detected in {wav_path.name}", flush=True)
+        # Step 2: VAD is for *speech*, which would skip the very sounds we
+        # want (bark / glass / siren). Use VAD only as an optional silence
+        # filter; if it returns nothing OR is unavailable, fall back to
+        # classifying the entire audio span. Also do a cheap RMS check for
+        # near-silent files to avoid wasted YAMNet inference.
+        rms = float(np.sqrt(np.mean(audio.astype(np.float32) ** 2)))
+        if rms < 1e-3:
+            print(f"[audio] {wav_path.name} is essentially silent (rms={rms:.4f}); skipping", flush=True)
             return []
 
-        # Merge adjacent segments and extract audio snippets
-        merged_segments = []
-        for seg in speech_timestamps:
-            if merged_segments and seg["start"] - merged_segments[-1]["end"] < 0.5:
-                # Merge if within 0.5s
-                merged_segments[-1]["end"] = seg["end"]
-            else:
-                merged_segments.append(seg)
+        vad_model, vad_utils = _get_silero_vad()
+        merged_segments: list[dict] = []
+        if vad_model is not None and vad_utils is not None:
+            try:
+                get_speech_timestamps = vad_utils[0]
+                speech_timestamps = get_speech_timestamps(
+                    audio, vad_model, sampling_rate=sr, return_seconds=True
+                )
+                for seg in speech_timestamps:
+                    if merged_segments and seg["start"] - merged_segments[-1]["end"] < 0.5:
+                        merged_segments[-1]["end"] = seg["end"]
+                    else:
+                        merged_segments.append(dict(seg))
+            except Exception as e:
+                print(f"[audio] VAD inference failed ({e}); using whole audio", flush=True)
+                merged_segments = []
 
-        print(f"[audio] Found {len(merged_segments)} speech segments", flush=True)
+        # Fallback: classify the whole clip (most common case for non-speech
+        # events like barks / glass breaks).
+        if not merged_segments:
+            merged_segments = [{"start": 0.0, "end": len(audio) / sr}]
+
+        print(f"[audio] Classifying {len(merged_segments)} segment(s)", flush=True)
 
         # Step 3: YAMNet inference on speech segments
         yamnet = _get_yamnet_model()

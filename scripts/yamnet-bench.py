@@ -16,19 +16,26 @@ import time
 import tempfile
 from pathlib import Path
 
+# Bench runs from /app/scripts; audio_engine is at /app/audio_engine.py.
+sys.path.insert(0, "/app")
+
 # Synthetic audio generation via ffmpeg + libav filters
+# NOTE: synthetic audio rarely matches YAMNet's training data. These tests
+# verify the PIPELINE runs end-to-end (load → VAD → YAMNet → output); they do
+# NOT validate classification accuracy. For real accuracy, point classify_audio
+# at a captured doorbell event WAV after enabling audio_events on a camera.
 TEST_SOUNDS = {
-    "dog_bark": {
+    "tone_burst": {
         "filter": "sine=frequency=500:duration=2,atrim=0:2",
-        "description": "Simulated dog bark (500Hz tone, 2s)",
+        "description": "500Hz sine, 2s — pipeline run, not bark-classifiable",
     },
-    "glass_break": {
-        "filter": "brownnoise=duration=1,atrim=0:1",
-        "description": "Simulated glass break (brown noise burst, 1s)",
+    "noise_burst": {
+        "filter": "anoisesrc=color=white:duration=1,atrim=0:1",
+        "description": "1s white-noise burst — pipeline run",
     },
     "silence": {
         "filter": "anullsrc=r=16000:cl=mono,atrim=0:2",
-        "description": "Pure silence (2s, should score low)",
+        "description": "Pure silence (2s) — should short-circuit on RMS check",
     },
 }
 
