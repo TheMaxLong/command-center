@@ -20,6 +20,7 @@ import numpy as np
 
 # Lazy-loaded models (initialized once on first use)
 _yamnet_model = None
+_yamnet_class_names: Optional[list[str]] = None
 _silero_vad_model = None
 _silero_utils = None
 
@@ -255,23 +256,33 @@ def classify_audio(
 
 
 def _get_yamnet_class_names() -> list[str]:
-    """Load YAMNet class names from the model."""
-    try:
-        # YAMNet class index is available at:
-        # https://github.com/tensorflow/models/blob/master/research/audioset/yamnet/yamnet_class_map.csv
-        # For now, we'll use a hardcoded subset of common classes
-        # In production, download and cache the full CSV
-        classes = [
-            "speech", "dog", "bark", "cat", "meow",
-            "glass", "break", "crash", "slam", "door",
-            "knock", "water", "rain", "wind", "smoke",
-            "alarm", "siren", "whistle", "crying", "gunshot",
-            "explosion", "fire", "music", "silence",
-        ]
-        return classes
-    except Exception:
-        # Fallback minimal list
-        return ["event_0", "event_1", "event_2"]
+    """Return YAMNet's 521 class display names, sourced from the model's
+    bundled class_map.csv. Loaded once and cached at module scope.
+
+    YAMNet outputs 521-dim logits; indexing a shorter list would crash on
+    any class outside the truncated range. The class map CSV ships with the
+    TF Hub model and is exposed via `model.class_map_path()`.
+    """
+    global _yamnet_class_names
+    if _yamnet_class_names is not None:
+        return _yamnet_class_names
+
+    import csv
+    model = _get_yamnet_model()
+    csv_path = model.class_map_path().numpy().decode("utf-8")
+    with open(csv_path, "r") as f:
+        reader = csv.reader(f)
+        next(reader)  # skip header: index,mid,display_name
+        names = [row[2] for row in reader]
+
+    if len(names) != 521:
+        # Sanity check: real YAMNet always has 521 classes. If this diverges,
+        # we want to know — but don't crash the audio pipeline over it.
+        print(f"[audio] WARNING: YAMNet class map has {len(names)} entries, expected 521", flush=True)
+
+    _yamnet_class_names = names
+    print(f"[audio] Loaded {len(names)} YAMNet class names.", flush=True)
+    return _yamnet_class_names
 
 
 def _matches_allowlist(class_name: str, allowlist: set[str]) -> bool:
