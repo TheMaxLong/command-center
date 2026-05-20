@@ -20,6 +20,10 @@ SERVE_PORT = 8888
 WATCHER_URL = "http://localhost:8181"
 GO2RTC_URL = "http://localhost:1984"
 
+# Sentinel digest tail synced from Pixel 6 by ~/bin/sentinel-digest-sync.sh (5min).
+SENTINEL_DIGEST_TAIL = Path.home() / ".local" / "state" / "sentinel-digest.tail"
+SENTINEL_DIGEST_SYNCED = Path.home() / ".local" / "state" / "sentinel-digest.tail.synced"
+
 # Import FreeMoCap worker (will start when first request arrives)
 try:
     from freemocap_worker import get_worker
@@ -40,6 +44,9 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         if (self.headers.get("Upgrade", "").lower() == "websocket"
                 and self.path.startswith("/go2rtc/")):
             self._proxy_websocket(self.path[7:])
+            return
+        if self.path.rstrip("/") == "/api/sentinel-digest" or self.path.startswith("/api/sentinel-digest?"):
+            self._serve_sentinel_digest()
             return
         if self.path.startswith("/api/"):
             self._proxy(WATCHER_URL, self.path[4:])  # strip /api
@@ -109,6 +116,44 @@ class DashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.end_headers()
         self.wfile.write(data)
+
+    def _serve_sentinel_digest(self):
+        """Parse the Sentinel digest tail (synced from Pixel 6) into JSON.
+
+        Each digest line: `[YYYY-MM-DD HH:MM:SS] [level] watcher: message`
+        Returns: {"last_synced": str|null, "entries": [{ts,level,watcher,message}]}
+        """
+        import re as _re
+        payload = {"last_synced": None, "entries": []}
+        if SENTINEL_DIGEST_SYNCED.exists():
+            try:
+                payload["last_synced"] = SENTINEL_DIGEST_SYNCED.read_text().strip() or None
+            except OSError:
+                pass
+        if SENTINEL_DIGEST_TAIL.exists():
+            try:
+                lines = SENTINEL_DIGEST_TAIL.read_text().splitlines()
+            except OSError:
+                lines = []
+            pat = _re.compile(r"^(\S+ \S+) \[(\w+)\] ([^:]+): (.*)$")
+            for line in lines:
+                m = pat.match(line.strip())
+                if not m:
+                    continue
+                payload["entries"].append({
+                    "ts": m.group(1),
+                    "level": m.group(2),
+                    "watcher": m.group(3),
+                    "message": m.group(4),
+                })
+        payload["entries"].reverse()  # newest first for the UI
+        body = json.dumps(payload).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-cache")
+        self.end_headers()
+        self.wfile.write(body)
 
     def _proxy_post(self, base_url: str, path: str, method: str = "POST"):
         target = base_url + path

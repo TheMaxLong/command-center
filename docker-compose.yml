@@ -23,6 +23,7 @@ services:
       - "8181:8181"
     volumes:
       - ./cameras.yaml:/config/cameras.yaml:ro   # copy from cameras.yaml.example
+      - ./scripts:/app/scripts:ro                 # host-side ops scripts (ensure-night-vision, etc.)
       - vision-data:/data                         # persistent SQLite DB
       - cam-media:/tmp/cams                       # clips + snapshots
     environment:

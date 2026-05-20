@@ -1690,6 +1690,7 @@
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
     <button class="ai-tab"        id="tab-gait"     onclick="switchAITab('gait')">GAIT BIO</button>
     <button class="ai-tab"        id="tab-mocap"    onclick="switchAITab('mocap')">MOCAP INTAKE</button>
+    <button class="ai-tab"        id="tab-sentinel" onclick="switchAITab('sentinel')">SENTINEL</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -2621,6 +2622,62 @@ function switchAITab(tab) {
   else if (tab === 'storage')  loadStorage();
   else if (tab === 'gait')     loadGait();
   else if (tab === 'mocap')    loadMocapIntake();
+  else if (tab === 'sentinel') loadSentinel();
+}
+
+async function loadSentinel() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING SENTINEL...</div>';
+  try {
+    const res  = await fetch('/api/sentinel-digest');
+    const data = await res.json();
+    const entries = data.entries || [];
+
+    const ageMin = (() => {
+      if (!data.last_synced) return null;
+      const t = Date.parse(data.last_synced.replace(' ', 'T'));
+      if (isNaN(t)) return null;
+      return Math.round((Date.now() - t) / 60000);
+    })();
+    const ageColor = ageMin === null ? 'var(--dim)'
+      : ageMin > 15 ? 'var(--red)'
+      : ageMin > 7 ? 'var(--orange, #d97706)'
+      : 'var(--cyan)';
+    const ageLabel = ageMin === null ? 'NEVER' : (ageMin + 'm AGO');
+
+    let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;">
+      SENTINEL — PIXEL 6 DIGEST
+      <span style="color:${ageColor};margin-left:12px;">SYNC ${ageLabel}</span>
+    </div>`;
+
+    if (!entries.length) {
+      html += '<div style="color:var(--dim);font-size:9px;padding:8px 0;">No digest entries yet — Sentinel watchers run every 5–10min on Pixel 6.</div>';
+    } else {
+      html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+      for (const e of entries) {
+        const lvlColor = e.level === 'critical' ? 'var(--red)'
+          : e.level === 'warn' ? 'var(--orange, #d97706)'
+          : 'var(--cyan)';
+        const msg = (e.message || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const watcher = (e.watcher || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        const ts = (e.ts || '').replace(/&/g, '&amp;').replace(/</g, '&lt;');
+        html += `<div style="display:grid;grid-template-columns:120px 90px 80px 1fr;gap:8px;font-size:9px;align-items:baseline;border-bottom:1px solid rgba(255,255,255,0.05);padding-bottom:4px;">
+          <span style="color:var(--dim);">${ts}</span>
+          <span style="color:${lvlColor};text-transform:uppercase;letter-spacing:1px;">${e.level}</span>
+          <span style="color:var(--text);text-transform:uppercase;letter-spacing:1px;">${watcher}</span>
+          <span style="color:var(--text);">${msg}</span>
+        </div>`;
+      }
+      html += '</div>';
+      html += `<div style="font-size:8px;color:var(--dim);margin-top:12px;letter-spacing:1px;">
+        Source: ~/sentinel/digest.log on Pixel 6 · synced via sentinel-digest-sync launchd (5min).
+      </div>`;
+    }
+
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">SENTINEL DIGEST UNAVAILABLE · check ~/bin/sentinel-digest-sync.sh</div>';
+  }
 }
 
 async function loadProfiles() {

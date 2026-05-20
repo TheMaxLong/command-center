@@ -14,6 +14,11 @@ sleep 1
 echo "  [1/2] Starting Docker services..."
 docker compose up -d --build
 
+# Best-effort: re-assert doorbell night vision (wtl_night_vision) in case the
+# Tapo D210 reset to the buggy dbl_night_vision schedule (fixed 2026-05-19).
+# Non-blocking, non-fatal — battery doorbells are usually asleep at boot.
+(sleep 4 && docker exec palm-vision-watcher python3 /app/scripts/ensure-night-vision.py 2>/dev/null) &
+
 # Start proxy/dashboard server (handles /api/ and /go2rtc/ proxying)
 echo "  [2/2] Starting dashboard server..."
 python3 "$(dirname "$0")/serve_dashboard.py" &
