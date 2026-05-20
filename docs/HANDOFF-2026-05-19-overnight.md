@@ -9,9 +9,24 @@ plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 
 ## TL;DR (read this at 6am)
 
-**8 of 11 tasks shipped, 2 deferred for your input, 1 not-applicable.** Two git pushes:
-- `command-center` `628f4e6` — overnight session: SENTINEL tile + night-vision lock + bench + POLICY
+**Two waves shipped tonight.** Wave 1 (Phase 0/1 + Sentinel hardening): 8 of 11 tasks. Wave 2 (Phase 2 audio + OSINT + SDR via 3 parallel subagents): 1 fully shipped, 1 staged for review, 1 plan-doc-only.
+
+**Pushes:**
+- `command-center` main is at `bdfef4f` — overnight session + AQI feed + SDR plan
+- `command-center` branch `feature/yamnet-audio-wip` — YAMNet audio NOT merged, **needs your review** (subagent skipped docker build verification)
 - `HARK-System-Map` `463c023` — Sentinel: auto-park cannamax + commit sshd-watchdog
+
+## Wave 2 — Phase 2 results (read before merging YAMNet)
+
+| Item | Status | What you do |
+|---|---|---|
+| **2.1 YAMNet audio** | ⚠️ Branch `feature/yamnet-audio-wip` — code written, NOT verified end-to-end (subagent only ran AST check) | Review the branch on GitHub. Before merging, run `docker compose build vision-watcher` to confirm tensorflow + torch install cleanly (adds ~1GB to image). Then `docker exec ... yamnet-bench.py`. Merge only after both pass. |
+| **2.10 Blitzortung lightning** | ❌ Stripped — subagent shipped a stub pointing at a dead URL. Blitzortung is MQTT-only. Comment in `intel_feeds.py` documents how to re-attempt. `paho-mqtt` already in requirements.txt. | Future session if you want lightning |
+| **2.11 PurpleAir AQI** | ✅ Shipped in `bdfef4f`. Needs `PURPLEAIR_API_KEY` env var (free at `develop.purpleair.com`). `/api/feeds/aqi` returns `{status: "unconfigured"}` until you set it. Container needs rebuild to activate. | `docker compose build vision-watcher && docker compose up -d vision-watcher` |
+| **2.12 CA Power Outages** | ❌ Stripped — no unified free REST API. Citizen already reports outages anyway | None |
+| **2.5/2.6/2.7 SDR (rtl_433 / ADS-B / AIS)** | 📋 Plan doc only — `docs/SDR-INTEGRATION-PLAN-2026-05-20.md`. 695 lines, 3 cold-executable runbooks. SDR survey confirms `rtl_tcp` is live on Mac PID 1837. | Read the doc + greenlight one phase at a time |
+
+## Wave 1 (earlier tonight) — original 11 tasks
 
 ### What's new and watching the house
 
