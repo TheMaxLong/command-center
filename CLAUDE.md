@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 PALM COMMAND is a Palantir-style home surveillance dashboard. It runs as a Docker stack on a Mac and serves a dark tactical web UI over Tailscale for remote access. All source lives in `~/palm-command/` and is synced to this repo.
 
+**Stack:** Python 3.12 (asyncio + ThreadingHTTPServer, stdlib only — no Flask/FastAPI) · YOLOv8 (Ultralytics) · OpenCV · pytapo · EasyOCR · SQLite WAL · go2rtc · ffmpeg · vanilla HTML/CSS/JS (no framework).
+
+**For detailed architecture, see [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md)** — 49 files, ~166k tokens, mapped with mermaid diagrams, full endpoint list, fusion math, threat tiers, gotchas.
+
 ## Running the Stack
 
 ```bash
