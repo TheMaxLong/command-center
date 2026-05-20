@@ -2,7 +2,7 @@
 cd "$(dirname "$0")"
 
 echo ""
-echo "  PALM COMMAND — startup"
+echo "  COMMAND CENTER — startup"
 echo "  ─────────────────────────────"
 
 # Kill any leftover processes

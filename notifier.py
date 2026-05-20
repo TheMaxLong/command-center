@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Push Notification Engine
+COMMAND CENTER — Push Notification Engine
 
 Delivers real-time alerts to your phone/devices via ntfy.sh (no account
 required) and optional Twilio SMS fallback.
@@ -147,7 +147,7 @@ def _send_sms(type_: str, severity: str, message: str,
     if not all([TWILIO_SID, TWILIO_TOKEN, TWILIO_FROM, TWILIO_TO]):
         return False
 
-    body_text = f"PALM COMMAND [{severity.upper()}] {title}: {message}"[:1600]
+    body_text = f"COMMAND CENTER [{severity.upper()}] {title}: {message}"[:1600]
     import base64, urllib.parse
     auth_str = base64.b64encode(f"{TWILIO_SID}:{TWILIO_TOKEN}".encode()).decode()
     url  = f"https://api.twilio.com/2010-04-01/Accounts/{TWILIO_SID}/Messages.json"
@@ -188,7 +188,7 @@ def notify(
         severity:  One of "critical" | "high" | "medium" | "low" | "info"
         message:   Alert body text (max ~500 chars recommended)
         camera_id: Optional camera that triggered the alert
-        title:     Notification title; defaults to "PALM COMMAND — <type>"
+        title:     Notification title; defaults to "COMMAND CENTER — <type>"
         force:     Skip cooldown check (use for critical one-shot alerts)
     """
     if not NTFY_TOPIC and not all([TWILIO_SID, TWILIO_TOKEN]):
@@ -202,7 +202,7 @@ def notify(
     emoji = _SEVERITY_EMOJI.get(severity.lower(), "📡")
     if title is None:
         cam_tag = f" [{camera_id}]" if camera_id else ""
-        title   = f"{emoji} PALM COMMAND{cam_tag} — {type_.replace('_', ' ').upper()}"
+        title   = f"{emoji} COMMAND CENTER{cam_tag} — {type_.replace('_', ' ').upper()}"
 
     def _deliver():
         ntfy_ok = _send_ntfy(type_, severity, message, camera_id, title)
@@ -230,8 +230,8 @@ def test_notify() -> dict:
     notify(
         type_="system_test",
         severity="info",
-        message="PALM COMMAND notification test — delivery confirmed.",
-        title="📡 PALM COMMAND — SYSTEM TEST",
+        message="COMMAND CENTER notification test — delivery confirmed.",
+        title="📡 COMMAND CENTER — SYSTEM TEST",
         force=True,
     )
     return {
@@ -270,7 +270,7 @@ def get_status() -> dict:
 def briefing() -> str:
     """Return a plain-text status summary for the PALANTIR terminal."""
     st = get_status()
-    lines = ["▸ NOTIFICATION ENGINE — PALM COMMAND"]
+    lines = ["▸ NOTIFICATION ENGINE — COMMAND CENTER"]
     if st["ntfy"]["enabled"]:
         lines.append(f"▸ ntfy.sh active → {st['ntfy']['url']}")
     else:

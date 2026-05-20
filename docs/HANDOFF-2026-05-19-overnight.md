@@ -1,7 +1,7 @@
 ---
 date: 2026-05-19 → 2026-05-20
 shift: 9pm Tue → 6am Wed (autonomous overnight while Max at facility)
-scope: Phase D (Palm Command Phase 0/1 addons + Sentinel hardening v2)
+scope: Phase D (Command Center Phase 0/1 addons + Sentinel hardening v2)
 plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 ---
 
@@ -73,7 +73,7 @@ plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 
 ## ⚠️ Noticed and need your eyes
 
-### Two diverged copies of Palm Command source on disk
+### Two diverged copies of Command Center source on disk
 
 - `~/palm-command/` — where the PM2 dashboard process runs `serve_dashboard.py` from
 - `~/Documents/GitHub/command-center/` — git remote (TheMaxLong/command-center) AND where the running Docker stack `palm-vision-watcher` was launched from
@@ -84,7 +84,7 @@ CLAUDE.md still asserts "All source lives in `~/palm-command/` and is synced to 
 
 ## Noticed but didn't touch
 
-- **`shadowbroker-backend` is in a restart loop** (exit 137, OOM-killed every ~30s). Container belongs to the Shadowbroker project, not Palm Command. Flagged here in case it's news to you; happy to chase tomorrow.
+- **`shadowbroker-backend` is in a restart loop** (exit 137, OOM-killed every ~30s). Container belongs to the Shadowbroker project, not Command Center. Flagged here in case it's news to you; happy to chase tomorrow.
 
 ---
 
@@ -175,7 +175,7 @@ PLAN doc said "replace canvas sparkline in 5-WEEK TRENDS tab." Verified there's 
 - **Recommendation: KEEP yolov8s.pt.** YOLOv10 was faster but detected ~50% fewer things on this dataset (low-light night frames). PLAN's "10–15% faster + better accuracy" did not hold here. No swap. Bench script lives in `scripts/bench-yolo.py` — re-run after daylight motion events to confirm with brighter frames.
 - **Rollback:** N/A (no code change to ai_engine.py).
 
-### ✅ Task #10 — Cross-cut: SENTINEL tile in Palm Command
+### ✅ Task #10 — Cross-cut: SENTINEL tile in Command Center
 
 Three pieces, all reversible:
 

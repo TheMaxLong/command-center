@@ -6,7 +6,7 @@ You now have:
 - **Seagate Portable Drive** — 926GB total, 572GB free. Dedicated offline storage.
 - **Wired Doorbell** — Tapo with RTSP. Real motion events at the house perimeter.
 - **FreeMoCap Installer** — Ready to run on demand. Turns video → skeleton BVH + movement data.
-- **OPS Center** — New 3-pane unified dashboard. Shadowbroker + Palm Command + Ground Station at :3600.
+- **OPS Center** — New 3-pane unified dashboard. Shadowbroker + Command Center + Ground Station at :3600.
 
 The pieces are here. Now think invasive.
 
@@ -39,7 +39,7 @@ Render skeleton on preview tile (Babylon.js? Cesium?)
   ↓
 Extract gait vector (18-dim from 17 keypoints)
   ↓
-Cross-reference against known profiles (Palm Command gait_engine.py)
+Cross-reference against known profiles (Command Center gait_engine.py)
   ↓
 If match: "PERSON_X approached door at 19:42, dwell 3.2s, left west"
 ```
@@ -55,7 +55,7 @@ Your Field Scan app (/field) already does face + LPR from phone camera. Add skel
 ```
 Field Scan: tap camera → video frame
   ↓
-Send to FreeMoCap pipeline OR stream to Palm Command
+Send to FreeMoCap pipeline OR stream to Command Center
   ↓
 Extract skeleton on receipt
   ↓
@@ -73,7 +73,7 @@ This solves the "who is that person?" problem when face fails (cap, sunglasses, 
 The new OPS Center is a **tactical fusion surface.** Use it:
 
 ```
-Palm Command pane (left):
+Command Center pane (left):
   → Detects unknown person at NW corner camera
   → Pulls skeleton BVH for that moment
 
@@ -136,7 +136,7 @@ If known: soft log "regular_mail_carrier 19:47–19:51 Thu"
 
 ### Immediate (This week)
 1. **MoCap Pipeline Scaffold**
-   - Drag-drop zone on Palm Command dashboard
+   - Drag-drop zone on Command Center dashboard
    - Video → Seagate:/mocap-in/ → FreeMoCap async → BVH/preview output
    - Inline preview tile
    - Test with real doorbell clip
@@ -239,7 +239,7 @@ You have:
 2. ✓ Storage (926GB Seagate)
 3. ✓ FreeMoCap (just installed)
 4. ✓ Unified dashboard (OPS Center v2 ready)
-5. ✓ Gait engine already in Palm Command (gait_engine.py)
+5. ✓ Gait engine already in Command Center (gait_engine.py)
 
 The pipeline is *almost* wired. MoCap is the missing link. Build it.
 

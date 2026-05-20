@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Dashboard server for Replit.
+COMMAND CENTER — Dashboard server for Replit.
 Serves the static dashboard on port 5000 and proxies:
   /api/*     → camera watcher on :8181
   /go2rtc/*  → go2rtc on :1984
@@ -444,5 +444,5 @@ class DashboardHandler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     server = ThreadingHTTPServer(("0.0.0.0", SERVE_PORT), DashboardHandler)
-    print(f"PALM COMMAND dashboard → http://0.0.0.0:{SERVE_PORT}", flush=True)
+    print(f"COMMAND CENTER dashboard → http://0.0.0.0:{SERVE_PORT}", flush=True)
     server.serve_forever()

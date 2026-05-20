@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Trend analyzer v2.
+COMMAND CENTER — Trend analyzer v2.
 
 Adds over v1:
   • velocity() — events-per-day rate this week vs last week
@@ -224,7 +224,7 @@ if __name__ == "__main__":
         print(_json.dumps(report, indent=2))
     else:
         print(f"\n{'─'*56}")
-        print(f"  PALM COMMAND · Trend Report · Last {args.weeks} weeks")
+        print(f"  COMMAND CENTER · Trend Report · Last {args.weeks} weeks")
         if args.camera:
             print(f"  Camera: {args.camera}")
         print(f"{'─'*56}")

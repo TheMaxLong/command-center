@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Multi-camera vision watcher v2.
+COMMAND CENTER — Multi-camera vision watcher v2.
 
 HTTP API on :8181
   GET /status                    → all cameras JSON
@@ -1159,7 +1159,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(401)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("WWW-Authenticate", 'Bearer realm="PALM COMMAND"')
+        self.send_header("WWW-Authenticate", 'Bearer realm="COMMAND CENTER"')
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
@@ -1273,6 +1273,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(_llm.generate_morning_brief(force=force))
             except ImportError as e:
                 self._json({"error": f"llm_brief unavailable: {e}"})
+
+        # /intel/anomaly-baseline[?weeks=4&camera=]  — statistical drift heatmap
+        elif p == "/intel/anomaly-baseline":
+            try:
+                import anomaly_baseline as _ab
+                weeks = int(qp("weeks") or 4)
+                camera = qp("camera")
+                self._json(_ab.baseline_grid(weeks=weeks, camera_id=camera))
+            except (ImportError, ValueError) as e:
+                self._json({"error": f"anomaly_baseline unavailable: {e}"})
+
+        # /intel/anomaly-cell?dow=N&hour=N[&days=28&camera=&limit=30]
+        elif p == "/intel/anomaly-cell":
+            try:
+                import anomaly_baseline as _ab
+                dow = int(qp("dow") or 0)
+                hour = int(qp("hour") or 0)
+                days = int(qp("days") or 28)
+                camera = qp("camera")
+                limit = int(qp("limit") or 30)
+                self._json({"events": _ab.cell_events(dow, hour, days=days, camera_id=camera, limit=limit)})
+            except (ImportError, ValueError) as e:
+                self._json({"error": f"anomaly_baseline unavailable: {e}"})
 
         # /intel/alerts[?camera=]
         elif p == "/intel/alerts":

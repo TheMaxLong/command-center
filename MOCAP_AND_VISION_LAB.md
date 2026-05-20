@@ -1,4 +1,4 @@
-# PALM COMMAND Vision Lab
+# COMMAND CENTER Vision Lab
 
 This is the success path for adding advanced computer vision without making the live camera loop fragile.
 
@@ -47,7 +47,7 @@ POST /api/scene/zones/<camera_id>
 
 ## Recommended Roadmap
 
-1. Keep PALM COMMAND as the operator UI and camera brain.
+1. Keep COMMAND CENTER as the operator UI and camera brain.
 2. Use `supervision` for polished zone overlays, line crossing, dwell zones, and count analytics.
 3. Keep the existing Kalman/ByteTrack tracker as the main live tracker; use Norfair only where it adds clear stability.
 4. Add a semantic video-search sidecar later so the agent can answer requests like “show me when someone was near the stairs.”

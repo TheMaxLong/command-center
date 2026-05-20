@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — License Plate Recognition (LPR) Engine
+COMMAND CENTER — License Plate Recognition (LPR) Engine
 
 Detects and reads license plates from vehicle crops.
 Uses OpenCV for plate localization + EasyOCR for text reading

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Persistent SQLite event store v2.
+COMMAND CENTER — Persistent SQLite event store v2.
 
 Schema additions over v1:
   • merge_profiles()        — merge duplicate profiles

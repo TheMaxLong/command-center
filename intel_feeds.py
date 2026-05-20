@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — External Intelligence Feeds Engine
+COMMAND CENTER — External Intelligence Feeds Engine
 
 Real-time threat awareness from public APIs — no API keys required.
 

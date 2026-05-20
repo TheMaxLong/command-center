@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Integrated Security AI Agent.
+COMMAND CENTER — Integrated Security AI Agent.
 
 A rule-based + optional LLM query engine you can talk to directly.
 Understands natural language questions about the security system and
@@ -819,7 +819,7 @@ def _handle_wanted_persons(text: str, camera_id) -> dict:
         # General status
         wanted = _fi.get_wanted_list(10)
         lines = [
-            f"▸ FBI WANTED DATABASE — PALM COMMAND INTEL",
+            f"▸ FBI WANTED DATABASE — COMMAND CENTER INTEL",
             f"▸ {stats['fbi_count']} wanted persons indexed from field offices: {', '.join(stats['field_offices'])}",
             f"▸ Last refresh: {stats['last_fbi_refresh']}",
             f"▸ Face match threshold: {stats['match_threshold']:.0%} similarity",
@@ -844,7 +844,7 @@ def _handle_gait_intel(text: str, camera_id) -> dict:
         import gait_engine as _ge
         profiles = _ge.get_gait_profiles()
         lines = [
-            "▸ GAIT BIOMETRIC ANALYSIS — PALM COMMAND",
+            "▸ GAIT BIOMETRIC ANALYSIS — COMMAND CENTER",
             "▸ Identifies individuals by skeletal walk signature — no face required.",
             "▸ Uses YOLOv8-pose 17-keypoint skeleton. 18-dimensional biometric vector.",
             "▸ Features: stride width · torso lean · arm swing · hip sway · step height",
@@ -914,7 +914,7 @@ def _handle_predictions(text: str, camera_id) -> dict:
             return {
                 "intent": "predictions",
                 "answer": (
-                    "▸ ARRIVAL PREDICTIONS — PALM COMMAND\n"
+                    "▸ ARRIVAL PREDICTIONS — COMMAND CENTER\n"
                     "▸ No predictions available yet.\n"
                     "▸ Need at least 5 sightings per entity to build a behavioral model.\n"
                     "▸ Models improve automatically as entities are tracked over time."
@@ -1014,7 +1014,7 @@ def _handle_notify_status(text: str, camera_id) -> dict:
         import notifier as _n
         if "test" in text.lower() or "send test" in text.lower():
             result = _n.test_notify()
-            lines = ["▸ NOTIFICATION TEST — PALM COMMAND"]
+            lines = ["▸ NOTIFICATION TEST — COMMAND CENTER"]
             lines.append(f"▸ ntfy.sh: {'ENABLED' if result['ntfy_enabled'] else 'DISABLED'}")
             if result["ntfy_url"]:
                 lines.append(f"  Subscribe: {result['ntfy_url']}")
@@ -1033,7 +1033,7 @@ def _handle_evidence(text: str, camera_id) -> dict:
         m = _re.search(r"(e\d{6,}|profile[- ]?(\d+)|regular[- ]?(\d+)|unknown[- ]?(\d+))", t)
         if not m:
             lines = [
-                "▸ EVIDENCE PACKAGE — PALM COMMAND",
+                "▸ EVIDENCE PACKAGE — COMMAND CENTER",
                 "▸ Bundles identity data, timeline, snapshots, gait & face intel",
                 "  into a downloadable ZIP archive.",
                 "",
@@ -1100,7 +1100,7 @@ def _handle_threat_score(text: str, camera_id) -> dict:
 
         # General explanation
         lines = [
-            "▸ THREAT SCORING ENGINE — PALM COMMAND",
+            "▸ THREAT SCORING ENGINE — COMMAND CENTER",
             "▸ Computes real-time risk score (0.0–1.0) for each detected entity.",
             "",
             "▸ SCORE COMPONENTS:",
@@ -1132,7 +1132,7 @@ def intel_feeds_loc() -> str:
 
 
 def _handle_help(text: str, camera_id: Optional[str]) -> dict:
-    answer = """▸ PALANTIR — PALM COMMAND AI AGENT
+    answer = """▸ PALANTIR — COMMAND CENTER AI AGENT
 
 SURVEILLANCE QUERIES:
   "Give me a briefing / what happened today"
@@ -1184,7 +1184,7 @@ EVIDENCE EXPORT:
   GET /api/evidence/<entity_id>?hours=72
 
 MISSION INTEL:
-  Powered by PALM COMMAND database + NWS · USGS · CAL FIRE · Citizen
+  Powered by COMMAND CENTER database + NWS · USGS · CAL FIRE · Citizen
   FBI Most Wanted (1,160+ records) · Face intel · Gait biometrics
   Kalman filter tracking · LPR active on vehicle detections
   Pattern-of-life engine · Entity relationship graph · Threat scoring

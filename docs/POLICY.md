@@ -5,9 +5,9 @@ last_revised: 2026-05-19 overnight (Claude, autonomous)
 plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 ---
 
-# Palm Command — Data & Consent Policy (DRAFT)
+# Command Center — Data & Consent Policy (DRAFT)
 
-This document is the operational consent / retention policy for the Palm Command home surveillance stack. It is **prerequisite** to shipping any audio capture / transcription feature (PLAN Phase 2.3 onward).
+This document is the operational consent / retention policy for the Command Center home surveillance stack. It is **prerequisite** to shipping any audio capture / transcription feature (PLAN Phase 2.3 onward).
 
 > **This is a working draft, not legal advice.** Items marked **(legal: review)** need a quick read by an attorney before going live, especially anything touching California two-party-consent (Penal Code § 632), CCPA, or the California stalking statute. Max should not treat this doc as a substitute for that review.
 

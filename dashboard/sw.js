@@ -1,4 +1,4 @@
-// PALM COMMAND — Service Worker (PWA shell)
+// COMMAND CENTER — Service Worker (PWA shell)
 const CACHE = 'palm-cmd-v1';
 const SHELL = ['/mobile'];
 

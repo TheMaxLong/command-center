@@ -5,7 +5,7 @@ scope: HOME ONLY (Palm Springs residence). Tap-in from facility via Tailscale.
 companion: SIDE-ADDONS-BRAINSTORM-2026-05-20.md (full domain research)
 ---
 
-# Palm Command — Side Add-Ons Plan
+# Command Center — Side Add-Ons Plan
 
 Phased rollout. Each item has effort estimate, value, dependency, and decision-needed flag. The phases are sequenced so each one ships independently — you can stop at any phase and the system is still cleaner than where you started.
 
@@ -63,7 +63,7 @@ New capabilities. Each is independent — you can ship any subset.
 | 2.1 | **YAMNet** on Tapo D210 mic. 521 audio classes — start with dog-bark / glass-break / siren / smoke-alarm event tagging | ⏱⏱⏱ | Doubles event surface for $0 new hardware | New SQLite table: `audio_events` |
 | 2.2 | **Silero-VAD** front-end (before any transcription) to skip silent segments | ⏱ | Compresses load 5–10x | Pure stdlib chain into YAMNet/Whisper |
 | 2.3 | **faster-whisper** transcription of doorbell conversations, tagged to clips | ⏱⏱⏱ | Audit trail of porch interactions | **REQUIRES POLICY.md from Phase 0.3.** CA two-party consent. Default: 30d auto-purge. |
-| 2.4 | **openWakeWord** voice-trigger for Palm Command actions ("alert mode on", "show doorbell") via Mac built-in mic | ⏱⏱⏱ | Hands-free dashboard control | Optional. Test in single-user mode first. |
+| 2.4 | **openWakeWord** voice-trigger for Command Center actions ("alert mode on", "show doorbell") via Mac built-in mic | ⏱⏱⏱ | Hands-free dashboard control | Optional. Test in single-user mode first. |
 
 ### 2B — SDR / RF intel layer (uses your existing RTL-SDR — Ground Station hardware)
 
@@ -104,7 +104,7 @@ These change how the system is shaped. Don't start without an explicit yes.
 | # | Item | Effort | Value | Decision needed |
 |---|---|---|---|---|
 | 3.1 | **Frigate NVR as 24/7 recording layer** behind `camera_watcher.py`. Frigate handles continuous record + index; your conductor still does entity resolution / threat scoring / NLU. Buy Coral EdgeTPU (~$100) for CPU-friendly inference on the Air bridge. | ⏱⏱⏱⏱ | 24/7 recorded footage indexed by object class. Disk space grows fast (~50–100GB/cam/month). | Yes/no on Coral purchase. Yes/no on disk growth. |
-| 3.2 | **Home Assistant as MQTT event broker** for all sensor types (rtl_433, BLE, Zigbee, Z-Wave, Shelly). Palm Command consumes one normalized stream. | ⏱⏱⏱⏱ | Cleaner integration story. Tradeoff: another whole service to operate. | Yes/no on adding HA. |
+| 3.2 | **Home Assistant as MQTT event broker** for all sensor types (rtl_433, BLE, Zigbee, Z-Wave, Shelly). Command Center consumes one normalized stream. | ⏱⏱⏱⏱ | Cleaner integration story. Tradeoff: another whole service to operate. | Yes/no on adding HA. |
 | 3.3 | **Scrypted as camera abstraction** in front of go2rtc — adds HomeKit Secure Video bridge if you want native iOS viewing | ⏱⏱⏱⏱ | Apple Home integration. Tradeoff: replaces the camera layer that already works. | Yes/no on HKSV (requires HomePod/Apple TV in the home). |
 | 3.4 | **MapLibre + MGRS overlay** for a facility-topology surface (where each camera is positioned in the house, sensor coverage zones, dead zones) | ⏱⏱⏱⏱ | Spatial awareness of camera coverage | Yes/no on building a "topology" surface at all |
 
@@ -139,7 +139,7 @@ If you have a weekend:
 
 If you have a focused week:
 - Everything in Phase 1 + Phase 2A (audio layer) + 2B (SDR layer)
-- That's the realistic version of a "transformed Palm Command"
+- That's the realistic version of a "transformed Command Center"
 
 ---
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Drone operations planner.
+COMMAND CENTER — Drone operations planner.
 
 This module intentionally keeps real aircraft control behind a bridge boundary.
 The dashboard can plan, approve, simulate, and audit property missions now; a DJI

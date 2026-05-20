@@ -433,7 +433,7 @@ def briefing() -> str:
     r = get_resolver()
     s = r.stats()
     lines = [
-        "▸ ENTITY RESOLUTION — PALM COMMAND",
+        "▸ ENTITY RESOLUTION — COMMAND CENTER",
         f"▸ Resolved entities:        {s['entities']}",
         f"▸ Total sightings:          {s['sightings']}",
         f"▸ Profile aliases linked:   {s['aliases']}",

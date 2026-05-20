@@ -1,7 +1,7 @@
 """
 camera_adapters.py — Universal multi-manufacturer camera adapter framework.
 
-PALM COMMAND supports any camera that can be reached over IP, USB, or
+COMMAND CENTER supports any camera that can be reached over IP, USB, or
 serial-style protocols. Each manufacturer/protocol gets a thin adapter that
 implements the CameraAdapter interface. New cameras plug in by:
 
@@ -495,7 +495,7 @@ register_adapter("nest",       RingStubAdapter)
 
 def adapter_summary() -> str:
     rows = list_adapters()
-    lines = [f"▸ PALM COMMAND CAMERA ADAPTER REGISTRY ({len(rows)} vendors)"]
+    lines = [f"▸ COMMAND CENTER CAMERA ADAPTER REGISTRY ({len(rows)} vendors)"]
     for r in rows:
         caps = ",".join(r["capabilities"])
         lines.append(f"  {r['vendor']:<12} :{r['default_port']:<5} [{caps}]")

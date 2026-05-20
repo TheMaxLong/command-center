@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Kalman Filter + Hungarian Algorithm Multi-Object Tracker
+COMMAND CENTER — Kalman Filter + Hungarian Algorithm Multi-Object Tracker
 
 A proper ByteTrack-inspired tracker replacing the naive IoU-only approach.
 

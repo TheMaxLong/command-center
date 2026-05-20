@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — optional vision intelligence helpers.
+COMMAND CENTER — optional vision intelligence helpers.
 
 This module keeps higher-level scene geometry separate from camera capture:
 zones, focus scoring, track summaries, and optional third-party CV tool status.

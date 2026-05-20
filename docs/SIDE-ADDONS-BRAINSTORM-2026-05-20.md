@@ -6,17 +6,17 @@ scouts: 5 parallel (camera ecosystem, AI/CV upgrades, OSINT/SDR, audio/sensors, 
 companion: SIDE-ADDONS-PLAN-2026-05-20.md (phased rollout)
 ---
 
-# Palm Command — Side Add-Ons Brainstorm
+# Command Center — Side Add-Ons Brainstorm
 
-What people in the open-source community have already built that we can plug into Palm Command. Five domains, ranked findings, hard passes documented. The companion `SIDE-ADDONS-PLAN-2026-05-20.md` has the phased rollout with effort estimates.
+What people in the open-source community have already built that we can plug into Command Center. Five domains, ranked findings, hard passes documented. The companion `SIDE-ADDONS-PLAN-2026-05-20.md` has the phased rollout with effort estimates.
 
-**Scope note:** Palm Command runs at Max's home in Palm Springs. The doorbell, front cam, sensors, and bridge machine all live there. Max taps in remotely from the facility via Tailscale. Nothing in this brainstorm extends to the facility itself — all "facility" / "Anderson" / "grow-room" references in earlier drafts were context-leak from sibling projects and have been scrubbed.
+**Scope note:** Command Center runs at Max's home in Palm Springs. The doorbell, front cam, sensors, and bridge machine all live there. Max taps in remotely from the facility via Tailscale. Nothing in this brainstorm extends to the facility itself — all "facility" / "Anderson" / "grow-room" references in earlier drafts were context-leak from sibling projects and have been scrubbed.
 
 ## Executive read (start here)
 
 **Five things that punch above their weight if you do nothing else:**
 
-1. **rtl_433** — Your RTL-SDR already exists for Ground Station. `rtl_433` listens on 433 MHz and decodes cheap door-contact / motion-PIR / temp / humidity sensors. Plug $5–20 Aqara/Sonoff/Shelly sensors anywhere and they show up as events in Palm Command via MQTT. Zero new core infrastructure.
+1. **rtl_433** — Your RTL-SDR already exists for Ground Station. `rtl_433` listens on 433 MHz and decodes cheap door-contact / motion-PIR / temp / humidity sensors. Plug $5–20 Aqara/Sonoff/Shelly sensors anywhere and they show up as events in Command Center via MQTT. Zero new core infrastructure.
 2. **YAMNet on the doorbell mic** — Google's 521-class audio event model runs on CPU. The Tapo D210's 2-way audio stream already exists in pytapo. Free dog-bark / glass-break / siren / alarm detection layered on top of your visual events. Doubles your intel surface for zero new hardware.
 3. **InsightFace (ArcFace 512-dim)** — Your current 80-dim histogram face vector is a generation behind. Drop in InsightFace's ArcFace and your face-match accuracy jumps ~20%. Same Python API surface as your current `face_intel.py`.
 4. **Supervision (Roboflow, 39k stars)** — One-line orchestration for YOLOv8 + ByteTrack + annotation. Replaces a few hundred lines of `ai_engine.py` glue with proven library code. Zero behavior change for users; cleaner internals.
@@ -34,7 +34,7 @@ What people in the open-source community have already built that we can plug int
 
 | Project | Stars | Effort | Why it matters |
 |---|---|---|---|
-| **Frigate NVR** [link](https://github.com/blakeblackshear/frigate) | 11k+ | MED | 24/7 NVR with native AI detection. Best-in-class for "always recording + indexed by object." Pairs via MQTT into Palm Command's event sink. EdgeTPU ($100 Coral) makes inference real-time on Intel CPUs. |
+| **Frigate NVR** [link](https://github.com/blakeblackshear/frigate) | 11k+ | MED | 24/7 NVR with native AI detection. Best-in-class for "always recording + indexed by object." Pairs via MQTT into Command Center's event sink. EdgeTPU ($100 Coral) makes inference real-time on Intel CPUs. |
 | **Scrypted** [link](https://github.com/koush/scrypted) | 3.5k+ | LOW | Universal camera plugin platform. HomeKit Secure Video bridge if you ever want iOS-native viewing. Sub-200ms codec negotiation. |
 | **python-onvif-zeep** [link](https://github.com/FalkTannhaeuser/python-onvif-zeep) | 500+ | MED | The big one nobody uses: **WS-Subscription real motion events** from the camera itself, not TCP-poll inference. 10x more reliable than "port is open = motion." Tapo C-series supports it; D210 doorbell does not. |
 | **DeepStack** [link](https://docs.deepstack.cc/object-detection/index.html) | ~2k | LOW | CPU-only AI inference server. Drop-in if you don't want to deal with Coral / GPU. Reasonable performance, simple HTTP API. |
@@ -139,8 +139,8 @@ What people in the open-source community have already built that we can plug int
 | **YAMNet** [link](https://github.com/tensorflow/models/tree/master/research/audioset/yamnet) | 30k+ (TF org) | LOW | 521 audio event classes. Detect bark / glass-break / sirens / smoke alarms on the Tapo D210 mic. CPU-only. |
 | **faster-whisper** [link](https://github.com/SYSTRAN/faster-whisper) | 10k+ | TRIVIAL | Offline doorbell-conversation transcription (4x speed of OpenAI Whisper). Tag transcripts to video frames. **YELLOW FLAG — CA two-party consent + retention policy needed.** |
 | **Silero-VAD** [link](https://github.com/snakers4/silero-vad) | 4k+ | LOW | Skip silent audio segments before Whisper. <1ms per chunk. Compresses transcription load 5–10x. |
-| **openWakeWord** [link](https://github.com/dscripka/openWakeWord) | 1.2k+ | MED | Voice-triggered Palm Command actions ("alert mode on", "show me the doorbell"). Privacy-preserving — no transcription, just keyword. |
-| **rtl_433** [link](https://github.com/merbanan/rtl_433) | 5k+ | LOW | **Your existing RTL-SDR becomes a 433 MHz home-sensor receiver.** Cheap door contacts / PIR / temp/humidity sensors ($5–20 each) → MQTT → Palm Command event log. |
+| **openWakeWord** [link](https://github.com/dscripka/openWakeWord) | 1.2k+ | MED | Voice-triggered Command Center actions ("alert mode on", "show me the doorbell"). Privacy-preserving — no transcription, just keyword. |
+| **rtl_433** [link](https://github.com/merbanan/rtl_433) | 5k+ | LOW | **Your existing RTL-SDR becomes a 433 MHz home-sensor receiver.** Cheap door contacts / PIR / temp/humidity sensors ($5–20 each) → MQTT → Command Center event log. |
 
 ### Tier 2 — Small purchase, big lift
 
@@ -150,7 +150,7 @@ What people in the open-source community have already built that we can plug int
 
 ### Tier 3 — Bigger commitment
 
-- **Home Assistant** [link](https://github.com/home-assistant/core) — Industry-standard MQTT broker + 1000+ device integrations. Could become the central event bus that all sensor types (rtl_433, BLE, Zigbee, Z-Wave, Shelly) feed into. Then Palm Command consumes one normalized MQTT stream. Tradeoff: another whole service to operate. Decide later.
+- **Home Assistant** [link](https://github.com/home-assistant/core) — Industry-standard MQTT broker + 1000+ device integrations. Could become the central event bus that all sensor types (rtl_433, BLE, Zigbee, Z-Wave, Shelly) feed into. Then Command Center consumes one normalized MQTT stream. Tradeoff: another whole service to operate. Decide later.
 - **Glass-break detection (custom spectrogram CNN)** — YAMNet handles the easy case. Custom training (~100–500 clips) on Edge Impulse gets you sub-5% false-positive rate. Wait until YAMNet results justify it.
 - **Lip-sync / deepfake detection** — research-grade, build-from-papers. Defer until deepfaked doorbell intrusions become real.
 

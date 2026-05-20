@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Face Intelligence & Cross-Reference Engine
+COMMAND CENTER — Face Intelligence & Cross-Reference Engine
 
 Pulls public wanted persons databases and compares detected faces
 against them using OpenCV feature analysis.

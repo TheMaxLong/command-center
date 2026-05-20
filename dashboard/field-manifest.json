@@ -1,7 +1,7 @@
 {
   "name": "Field Scan",
   "short_name": "FieldScan",
-  "description": "Palm Command mobile field scanner — plates and faces",
+  "description": "Command Center mobile field scanner — plates and faces",
   "start_url": "/field",
   "display": "standalone",
   "orientation": "portrait",

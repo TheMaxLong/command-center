@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Neighborhood Traffic Camera Module
+COMMAND CENTER — Neighborhood Traffic Camera Module
 
 Provides a live-updating map view of San Rafael Ave & Palm Canyon Dr,
 Palm Springs CA — stitched from OpenStreetMap tiles with tactical overlay.
@@ -207,7 +207,7 @@ def _build_map() -> Optional[bytes]:
     # Bottom bar
     draw.rectangle([0, total - 20, total, total], fill=(7, 11, 15, 220))
     draw.text((8, total - 16), "© OpenStreetMap contributors", fill=(61, 81, 102), font=font_sm)
-    draw.text((total - 148, total - 16), f"PALM COMMAND · D8", fill=(0, 184, 217), font=font_sm)
+    draw.text((total - 148, total - 16), f"COMMAND CENTER · D8", fill=(0, 184, 217), font=font_sm)
 
     # Tile count badge
     badge_txt = f"{tiles_loaded}/{GRID*GRID} tiles"

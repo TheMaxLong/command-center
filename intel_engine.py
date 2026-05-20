@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Intelligence Engine.
+COMMAND CENTER — Intelligence Engine.
 
 Generates plain-English scene summaries and alert logic on top of the
 raw detection + profile data.  No external API required — pure local logic.

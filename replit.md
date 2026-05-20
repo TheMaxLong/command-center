@@ -1,7 +1,7 @@
-# PALM COMMAND
+# COMMAND CENTER
 
 ## Overview
-PALM COMMAND is a home security AI surveillance system ("Situational Awareness System"). It provides a dark-themed tactical dashboard for monitoring Tapo IP cameras (D210/D230/C310), generic RTSP cameras, and go2rtc streams. Features include motion detection, YOLOv8 AI detection, multi-person profiling, cross-camera tracking, Kalman-filter ByteTrack multi-object tracking, license plate recognition, real-time external intelligence feeds, gait biometric analysis, FBI face intelligence cross-reference, pattern-of-life behavioral modeling, entity relationship graph, threat scoring, and predictive arrival forecasting.
+COMMAND CENTER is a home security AI surveillance system ("Situational Awareness System"). It provides a dark-themed tactical dashboard for monitoring Tapo IP cameras (D210/D230/C310), generic RTSP cameras, and go2rtc streams. Features include motion detection, YOLOv8 AI detection, multi-person profiling, cross-camera tracking, Kalman-filter ByteTrack multi-object tracking, license plate recognition, real-time external intelligence feeds, gait biometric analysis, FBI face intelligence cross-reference, pattern-of-life behavioral modeling, entity relationship graph, threat scoring, and predictive arrival forecasting.
 
 ## Architecture
 

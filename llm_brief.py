@@ -1,5 +1,5 @@
 """
-PALM COMMAND — Morning Briefing generator via local Ollama LLM.
+COMMAND CENTER — Morning Briefing generator via local Ollama LLM.
 
 Polls events + alerts + feeds, builds a compact structured input, asks the
 local LLM (default qwen3:14b on host:11434) to summarize as a brief.

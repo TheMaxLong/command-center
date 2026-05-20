@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Pattern-of-Life & Entity Relationship Engine
+COMMAND CENTER — Pattern-of-Life & Entity Relationship Engine
 
 The Palantir layer. Builds behavioral models for every entity and
 surfaces relationships, predictions, and threat scores.

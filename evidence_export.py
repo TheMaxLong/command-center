@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Evidence Package Exporter
+COMMAND CENTER — Evidence Package Exporter
 
 Bundles everything the system knows about an entity or profile into a
 self-contained ZIP archive suitable for record-keeping or law enforcement.
@@ -152,7 +152,7 @@ def _build_report(
 ) -> str:
     lines = [
         "=" * 72,
-        "  PALM COMMAND — EVIDENCE PACKAGE",
+        "  COMMAND CENTER — EVIDENCE PACKAGE",
         "=" * 72,
         f"  Generated:   {generated_at}",
         f"  Subject ID:  {entity_id}",

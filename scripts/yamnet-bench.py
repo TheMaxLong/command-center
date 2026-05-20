@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — YAMNet Audio Classification Benchmark
+COMMAND CENTER — YAMNet Audio Classification Benchmark
 
 Generates synthetic test audio (dog bark, glass break, silence) and runs
 YAMNet inference to measure latency and validate detection accuracy.

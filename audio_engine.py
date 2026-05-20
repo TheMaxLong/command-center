@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Audio event classification via YAMNet + Silero-VAD.
+COMMAND CENTER — Audio event classification via YAMNet + Silero-VAD.
 
 YAMNet identifies sound events (dog bark, glass break, sirens, alarms, etc.)
 without recording or transcribing speech (compliant with CA two-party consent).

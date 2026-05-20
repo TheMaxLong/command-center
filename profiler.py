@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Person profiler v2.
+COMMAND CENTER — Person profiler v2.
 
 Changes from v1:
   • Uses 64-dim enriched embedding from ai_engine.compute_embedding()

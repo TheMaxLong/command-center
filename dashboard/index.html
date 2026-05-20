@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PALM COMMAND</title>
+  <title>COMMAND CENTER</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
@@ -1534,7 +1534,7 @@
 <div id="header">
   <div class="hdr-left">
     <div>
-      <div class="logo">PALM COMMAND</div>
+      <div class="logo">COMMAND CENTER</div>
       <div class="logo-sub">SITUATIONAL AWARENESS SYSTEM</div>
     </div>
     <div class="divider"></div>
@@ -1806,14 +1806,14 @@
 <div id="palantir-panel">
   <div id="palantir-header">
     <div class="pal-title">PALANTIR</div>
-    <div class="pal-sub">TACTICAL AI SECURITY ANALYST · PALM COMMAND v1.2</div>
+    <div class="pal-sub">TACTICAL AI SECURITY ANALYST · COMMAND CENTER v1.2</div>
     <button id="palantir-close" onclick="closePalantir()">✕ CLOSE</button>
   </div>
   <div id="palantir-history">
     <!-- Welcome message -->
     <div class="pal-msg-agent">
       <div class="pal-label-agent">PALANTIR ·</div>
-      <div class="pal-text-agent">▸ PALANTIR online. PALM COMMAND AI Security Analyst active.
+      <div class="pal-text-agent">▸ PALANTIR online. COMMAND CENTER AI Security Analyst active.
 ▸ I have access to your camera events, person profiles, activity trends, and anomaly data.
 ▸ Ask me anything about your surveillance system.
 ▸ Type <span style="color:var(--green-dim)">'help'</span> for full command reference.</div>
@@ -1865,7 +1865,7 @@
 <!-- ── AI INTEL OVERLAY ── -->
 <div id="ai-overlay">
   <div id="ai-overlay-header">
-    <div class="title">AI INTEL · PALM COMMAND</div>
+    <div class="title">AI INTEL · COMMAND CENTER</div>
     <button id="ai-close" onclick="closeAIPanel()">✕ CLOSE</button>
   </div>
   <div id="ai-tabs">
@@ -1881,6 +1881,7 @@
     <button class="ai-tab"        id="tab-mocap"    onclick="switchAITab('mocap')">MOCAP INTAKE</button>
     <button class="ai-tab"        id="tab-sentinel" onclick="switchAITab('sentinel')">SENTINEL</button>
     <button class="ai-tab"        id="tab-brief"    onclick="switchAITab('brief')">MORNING BRIEF</button>
+    <button class="ai-tab"        id="tab-baseline" onclick="switchAITab('baseline')">BASELINE</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -1896,7 +1897,7 @@
 <!-- ── FOOTER ── -->
 <div id="footer">
   <div class="footer-left">
-    <span>PALM COMMAND v1.2</span>
+    <span>COMMAND CENTER v1.2</span>
     <span style="color:var(--border)">|</span>
     <span>go2rtc · <a href="/go2rtc/" target="_blank" style="color:inherit;text-decoration:none">:1984</a></span>
     <span style="color:var(--border)">|</span>
@@ -2814,6 +2815,113 @@ function switchAITab(tab) {
   else if (tab === 'mocap')    loadMocapIntake();
   else if (tab === 'sentinel') loadSentinel();
   else if (tab === 'brief')    loadMorningBrief();
+  else if (tab === 'baseline') loadBaseline();
+}
+
+async function loadBaseline() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">COMPUTING BASELINE DRIFT...</div>';
+  try {
+    const res  = await fetch('/api/intel/anomaly-baseline?weeks=4');
+    const data = await res.json();
+    if (data.error) {
+      body.innerHTML = `<div style="color:var(--red);padding:20px;font-size:10px;">${data.error}</div>`;
+      return;
+    }
+    const grid = data.grid || [];
+    const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+    const hasBaseline = (data.baseline_n_weeks || 0) >= 1;
+    let maxCurrent = 1;
+    for (const c of grid) if (c.count_current > maxCurrent) maxCurrent = c.count_current;
+    const cellColor = (c) => {
+      if (hasBaseline && c.z_score != null) {
+        const az = Math.abs(c.z_score);
+        if (az >= 3)  return 'rgba(220,38,38,0.85)';
+        if (az >= 2)  return 'rgba(217,119,6,0.75)';
+        if (az >= 1)  return 'rgba(232,178,30,0.60)';
+        if (c.count_current > 0) return 'rgba(0,184,217,0.35)';
+        return 'rgba(0,184,217,0.05)';
+      }
+      if (!c.count_current) return 'rgba(0,184,217,0.04)';
+      const pct = c.count_current / maxCurrent;
+      const alpha = (0.10 + pct * 0.70).toFixed(2);
+      return `rgba(0,184,217,${alpha})`;
+    };
+    let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline;">
+      <span>ANOMALY BASELINE · 7×24 RHYTHM HEATMAP</span>
+      <span style="color:var(--dim);letter-spacing:1px;">week ${data.current_week} · baseline ${data.baseline_n_weeks}w · ${data.sample_count} events</span>
+    </div>`;
+    if (!hasBaseline) {
+      html += `<div style="color:var(--orange,#d97706);font-size:9px;letter-spacing:1px;background:rgba(217,119,6,0.08);border-left:2px solid var(--orange,#d97706);padding:6px 10px;margin-bottom:10px;">
+        BASELINE STILL FORMING · need ≥1 full prior week. Showing raw activity-density. Z-score coloring activates once history accumulates.
+      </div>`;
+    }
+    html += `<div style="display:grid;grid-template-columns: 28px repeat(24, 1fr);gap:1px;font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;">`;
+    html += `<div></div>`;
+    for (let h = 0; h < 24; h++) {
+      html += `<div style="color:var(--dim);text-align:center;line-height:14px;">${h}</div>`;
+    }
+    for (let d = 0; d < 7; d++) {
+      html += `<div style="color:var(--dim);line-height:14px;">${days[d]}</div>`;
+      for (let h = 0; h < 24; h++) {
+        const c = grid.find(g => g.dow === d && g.hour === h) || {dow:d, hour:h, count_current:0};
+        const color = cellColor(c);
+        const z = c.z_score != null ? ` · z=${c.z_score}` : '';
+        const baseline = (c.mean != null && c.std != null) ? `μ=${c.mean} σ=${c.std}` : '';
+        const tip = `${days[d]} ${String(h).padStart(2,'0')}:00 · n=${c.count_current||0}${z} ${baseline}`;
+        html += `<div onclick="baselineDrill(${d},${h})" title="${tip}" style="background:${color};height:14px;cursor:pointer;border-radius:1px;transition:transform 100ms;" onmouseover="this.style.transform='scale(1.4)'" onmouseout="this.style.transform='scale(1)'"></div>`;
+      }
+    }
+    html += `</div>`;
+    if ((data.top_anomalies || []).length) {
+      html += `<div style="margin-top:14px;font-size:8px;color:var(--cyan);letter-spacing:2px;">TOP ANOMALIES (|z|≥1.5)</div>`;
+      html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">`;
+      for (const a of data.top_anomalies) {
+        const accent = a.severity === 'outlier' ? 'var(--red)'
+          : a.severity === 'anomaly' ? 'var(--orange,#d97706)'
+          : 'var(--orange,#d97706)';
+        html += `<div onclick="baselineDrill(${a.dow},${a.hour})" style="cursor:pointer;border-left:2px solid ${accent};padding:4px 8px;font-size:10px;display:flex;justify-content:space-between;align-items:baseline;background:rgba(255,255,255,0.02);">
+          <span><span style="color:${accent};letter-spacing:2px;">${days[a.dow]} ${String(a.hour).padStart(2,'0')}:00</span> <span style="color:var(--text);">${a.count_current} events</span></span>
+          <span style="color:var(--dim);font-size:9px;">z=${a.z_score} · μ=${a.mean} ± ${a.std}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `<div id="baseline-drill" style="margin-top:14px;font-size:9px;color:var(--dim);"></div>`;
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = `<div style="color:var(--red);padding:20px;font-size:10px;">BASELINE UNAVAILABLE · ${err.message || err}</div>`;
+  }
+}
+
+async function baselineDrill(dow, hour) {
+  const drill = document.getElementById('baseline-drill');
+  if (!drill) return;
+  const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+  drill.innerHTML = `<div style="color:var(--cyan);font-size:8px;letter-spacing:2px;">LOADING ${days[dow]} ${String(hour).padStart(2,'0')}:00 EVENTS...</div>`;
+  try {
+    const r = await fetch(`/api/intel/anomaly-cell?dow=${dow}&hour=${hour}&days=28`);
+    const d = await r.json();
+    const evs = d.events || [];
+    let html = `<div style="color:var(--cyan);font-size:8px;letter-spacing:2px;margin-bottom:8px;">EVENTS · ${days[dow]} ${String(hour).padStart(2,'0')}:00 · LAST 28d (${evs.length})</div>`;
+    if (!evs.length) {
+      html += `<div style="color:var(--dim);font-size:9px;">no events in this cell over the last 28 days.</div>`;
+    } else {
+      html += `<div style="display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto;">`;
+      for (const e of evs.slice(0, 20)) {
+        const dt = new Date(e.ts * 1000).toLocaleString('en-US', {hour12:false});
+        html += `<div style="font-size:9px;display:grid;grid-template-columns:140px 80px 1fr;gap:8px;align-items:baseline;border-bottom:1px solid rgba(255,255,255,0.03);padding-bottom:2px;">
+          <span style="color:var(--dim);">${dt}</span>
+          <span style="color:var(--cyan);letter-spacing:1px;">${(e.camera_id||'').toUpperCase()}</span>
+          <span style="color:var(--text);">event #${e.id}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    drill.innerHTML = html;
+  } catch (err) {
+    drill.innerHTML = `<div style="color:var(--red);font-size:9px;">drill-down failed · ${err.message || err}</div>`;
+  }
 }
 
 async function loadMorningBrief(force=false) {
@@ -3701,7 +3809,7 @@ async function loadDroneOps() {
           <div class="ops-section">
             <div class="ops-title"><span>REAL DJI INTEGRATION PATH</span><span>ANDROID / DOCK</span></div>
             <div style="color:var(--text);font-size:8px;line-height:1.9;letter-spacing:0.8px;">
-              DJI consumer and enterprise control generally needs a native Android bridge via DJI Mobile SDK, or a DJI Dock / FlightHub style cloud bridge for docked enterprise aircraft. PALM COMMAND should own mission intent, audit, video review, and alerts; the bridge should own aircraft safety, geofence checks, telemetry, and manual pilot takeover.
+              DJI consumer and enterprise control generally needs a native Android bridge via DJI Mobile SDK, or a DJI Dock / FlightHub style cloud bridge for docked enterprise aircraft. COMMAND CENTER should own mission intent, audit, video review, and alerts; the bridge should own aircraft safety, geofence checks, telemetry, and manual pilot takeover.
             </div>
           </div>
           <div class="ops-section">
@@ -4749,7 +4857,7 @@ async function refreshStatusTicker() {
     const oneRun = segs.join(sep);
     track.innerHTML = oneRun + sep + oneRun + sep;
   } else {
-    track.innerHTML = '<span class="tk-key">PALM COMMAND</span><span class="tk-ok">no feeds available</span>';
+    track.innerHTML = '<span class="tk-key">COMMAND CENTER</span><span class="tk-ok">no feeds available</span>';
   }
 }
 refreshStatusTicker();
@@ -4915,7 +5023,7 @@ setInterval(refreshLightningGlobe, 15000);
   <button class="opab-btn opab-play">▶ READ BRIEF</button>
   <button class="opab-btn opab-dismiss">DISMISS</button>
 </div>
-<div id="status-ticker"><div id="status-ticker-track">PALM COMMAND · initializing telemetry...</div></div>
+<div id="status-ticker"><div id="status-ticker-track">COMMAND CENTER · initializing telemetry...</div></div>
 
 </body>
 </html>

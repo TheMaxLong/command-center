@@ -324,7 +324,7 @@ def discovery_briefing() -> str:
     """Run discovery and return a human-readable PALANTIR-style summary."""
     found = discover_all()
     if not found:
-        return ("▸ NETWORK DISCOVERY — PALM COMMAND\n"
+        return ("▸ NETWORK DISCOVERY — COMMAND CENTER\n"
                 "▸ No cameras detected on local subnet.\n"
                 "▸ Confirm: (1) cameras powered on, (2) on same LAN as host,\n"
                 "▸           (3) firewall not blocking ONVIF UDP/3702.\n"

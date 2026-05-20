@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Gait Analysis Engine
+COMMAND CENTER — Gait Analysis Engine
 
 Identifies individuals by their walk signature — no face needed.
 Uses YOLOv8-pose skeletal keypoints to compute a biometric gait vector

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — AI detection engine v2.
+COMMAND CENTER — AI detection engine v2.
 
 Upgrades over v1:
   • All instances per class returned (multiple people in frame)

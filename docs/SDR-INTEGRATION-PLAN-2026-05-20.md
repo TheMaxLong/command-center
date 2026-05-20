@@ -113,9 +113,9 @@ rtl_433 -M mqtt=localhost:1883 -M protocol=all -F json
 mosquitto_sub -h localhost -t "home/sensors/#" -v
 ```
 
-#### Integration with Palm Command
+#### Integration with Command Center
 
-Palm Command's `intel_feeds.py` will need a new feed handler:
+Command Center's `intel_feeds.py` will need a new feed handler:
 
 ```python
 # New coroutine in intel_feeds.py:
@@ -143,7 +143,7 @@ async def _poll_mqtt_sensors():
 
 **Conflict check:** None. rtl_433 connects to rtl_tcp on port 2195, same as dump1090. No USB contention.
 
-**Effort:** 3–4 hours (install, config, test, integrate to Palm Command).
+**Effort:** 3–4 hours (install, config, test, integrate to Command Center).
 
 #### Decisions Max owes
 
@@ -194,7 +194,7 @@ netstat -an | grep 8080   # should show LISTEN (HTTP JSON API)
 # Should return live aircraft array (or empty [])
 ```
 
-#### Integration with Palm Command + Shadowbroker
+#### Integration with Command Center + Shadowbroker
 
 ```python
 # New coroutine in intel_feeds.py:
@@ -225,7 +225,7 @@ async def _poll_adsb():
 
 **Conflict check:** None. readsb reads from rtl_tcp (port 2195), like rtl_433. No hardware conflict.
 
-**Effort:** 3–4 hours (install, wire to Palm Command, test with live aircraft, optional tar1090 UI setup).
+**Effort:** 3–4 hours (install, wire to Command Center, test with live aircraft, optional tar1090 UI setup).
 
 #### Decisions Max owes
 
@@ -269,7 +269,7 @@ cmake .. && make -j$(sysctl -n hw.ncpu)
 ./AIS-catcher -device localhost:2195 -o localhost:1883 -u -m mqtt
 ```
 
-#### Integration with Palm Command
+#### Integration with Command Center
 
 ```python
 # New coroutine in intel_feeds.py:
@@ -301,7 +301,7 @@ async def _poll_ais():
 
 **Conflict check:** None. AIS-Catcher also uses rtl_tcp. No USB conflict.
 
-**Effort:** 2–3 hours (build/install, wire to Palm Command, test).
+**Effort:** 2–3 hours (build/install, wire to Command Center, test).
 
 #### Decisions Max owes
 
@@ -319,7 +319,7 @@ Each runbook is **standalone** — you can execute Phase 2.5, 2.6, or 2.7 indepe
 
 **Time estimate:** 3–4 hours  
 **Prerequisites:** Nothing beyond what you have  
-**Verification:** Sensors appear in MQTT topics and Palm Command event log  
+**Verification:** Sensors appear in MQTT topics and Command Center event log  
 
 ```bash
 # STEP 1: Verify rtl_tcp is running
@@ -367,7 +367,7 @@ brew services start mosquitto
 pm2 start "mosquitto -c ~/.mosquitto/mosquitto.conf" --name mosquitto
 pm2 start "rtl_433 -F mqtt localhost:1883:home/rtl433 -F json -M protocol=all" --name rtl_433
 
-# STEP 9: Integrate into Palm Command
+# STEP 9: Integrate into Command Center
 # Edit ~/palm-command/intel_feeds.py, add _poll_mqtt_sensors() coroutine
 # (See Part 2.1 above for code template)
 # Restart camera_watcher: docker compose restart vision-watcher
@@ -435,13 +435,13 @@ python3 -m http.server 8081 &
 pm2 start "readsb --device-type rtltcp --rtltcp localhost:2195 --net --net-bi-port 0 --net-bo-port 30005 --net-http-port 8080 --json-location $LAT,$LON --log-file ~/.readsb/readsb.log" --name readsb
 pm2 save
 
-# STEP 11: Integrate into Palm Command
+# STEP 11: Integrate into Command Center
 # Edit ~/palm-command/intel_feeds.py, add _poll_adsb() coroutine
 # (See Part 2.2 above for code template)
 # Restart camera_watcher: docker compose restart vision-watcher
 
 # STEP 12: Verify in dashboard + Shadowbroker
-# Open http://localhost:8888 (Palm Command), check Event Log for "aircraft_sighting" entries
+# Open http://localhost:8888 (Command Center), check Event Log for "aircraft_sighting" entries
 # Open http://localhost:3500 (Shadowbroker), compare global ADS-B to local readsb
 # If entries appear, Phase 2.6 is DONE
 ```
@@ -497,13 +497,13 @@ mosquitto_sub -h localhost -t "ais/#" -v
 pm2 start "~/AIS-catcher/build/AIS-catcher -device localhost:2195 -o localhost:5000 -u" --name ais-catcher
 pm2 save
 
-# STEP 10: Integrate into Palm Command
+# STEP 10: Integrate into Command Center
 # Edit ~/palm-command/intel_feeds.py, add _poll_ais() coroutine
 # (See Part 2.3 above for code template)
 # Restart camera_watcher: docker compose restart vision-watcher
 
 # STEP 11: Verify in dashboard + Shadowbroker
-# Open http://localhost:8888 (Palm Command), check Event Log for "vessel_sighting" entries
+# Open http://localhost:8888 (Command Center), check Event Log for "vessel_sighting" entries
 # Open http://localhost:3500 (Shadowbroker), compare global AIS feed to local AIS-Catcher
 # If entries appear, Phase 2.7 is DONE
 
@@ -619,7 +619,7 @@ If Max ships all three decoders running continuously on the Mac:
 - [ ] mosquitto running + listening on `:1883`
 - [ ] rtl_433 successfully decoding ≥1 sensor packet to MQTT
 - [ ] `_poll_mqtt_sensors()` coroutine added to `intel_feeds.py`
-- [ ] Palm Command dashboard shows ≥1 sensor event in Event Log
+- [ ] Command Center dashboard shows ≥1 sensor event in Event Log
 - [ ] Retention policy defined (how long to keep sensor data)
 - [ ] Runbook has been executed cold (no copy-paste errors)
 
@@ -628,7 +628,7 @@ If Max ships all three decoders running continuously on the Mac:
 - [ ] readsb running + HTTP API responding at `:8080`
 - [ ] curl returns valid JSON (even if `[]` empty)
 - [ ] `_poll_adsb()` coroutine added to `intel_feeds.py`
-- [ ] Palm Command Event Log shows ≥1 aircraft sighting (wait for PSP traffic if none immediately)
+- [ ] Command Center Event Log shows ≥1 aircraft sighting (wait for PSP traffic if none immediately)
 - [ ] Shadowbroker comparison done (local readsb vs global Shadowbroker feed)
 - [ ] Runbook executed cold
 
@@ -637,7 +637,7 @@ If Max ships all three decoders running continuously on the Mac:
 - [ ] AIS-Catcher built from source (or pre-built binary confirmed working)
 - [ ] HTTP API or MQTT topics receiving data (even if empty)
 - [ ] `_poll_ais()` coroutine added to `intel_feeds.py`
-- [ ] Vessel sightings appear in Palm Command Event Log (or confirmed zero vessels in 48h)
+- [ ] Vessel sightings appear in Command Center Event Log (or confirmed zero vessels in 48h)
 - [ ] Runbook executed cold
 
 ---
@@ -676,7 +676,7 @@ Before starting:
 - **This document:** `/Users/max/Documents/GitHub/command-center/docs/SDR-INTEGRATION-PLAN-2026-05-20.md`
 - **Companion brainstorm:** `/Users/max/Documents/GitHub/command-center/docs/SIDE-ADDONS-BRAINSTORM-2026-05-20.md`
 - **Phases master plan:** `/Users/max/Documents/GitHub/command-center/docs/SIDE-ADDONS-PLAN-2026-05-20.md`
-- **Palm Command CLAUDE.md:** `/Users/max/Documents/GitHub/command-center/CLAUDE.md`
+- **Command Center CLAUDE.md:** `/Users/max/Documents/GitHub/command-center/CLAUDE.md`
 - **Shadowbroker project:** `/Users/max/Documents/GitHub/Shadowbroker/`
 - **Ground Station container:** `docker ps | grep ground-station` (running at 0.0.0.0:7001)
 
@@ -684,7 +684,7 @@ Before starting:
 
 ## Related Reading
 
-- **Palm Command:** Project surveillance + AI intel layer. Existing cameras + event log.
+- **Command Center:** Project surveillance + AI intel layer. Existing cameras + event log.
 - **Shadowbroker:** Global OSINT dashboard. ADS-B + maritime + satellites already integrated.
 - **OPS CENTER:** Unified portal at `:3600` (launches Shadowbroker + Ground Station side-by-side).
 - **PLAN item 2.15:** "BrowSDR waterfall" as 4th OPS Center panel (real-time spectrum view). Pairs with Phase 2.5/2.6/2.7 completion.

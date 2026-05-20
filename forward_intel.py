@@ -310,7 +310,7 @@ def build_scenarios() -> list[dict]:
 def forecast_briefing(limit: int = 10) -> str:
     scenarios = build_scenarios()
     if not scenarios:
-        return ("▸ FORWARD INTELLIGENCE — PALM COMMAND\n"
+        return ("▸ FORWARD INTELLIGENCE — COMMAND CENTER\n"
                 "▸ No predictive scenarios at this time.\n"
                 "▸ All observed entities behaving within normal pattern envelope.\n"
                 "▸ Engine will surface scenarios as anomalous patterns emerge.")
@@ -329,7 +329,7 @@ def forecast_briefing(limit: int = 10) -> str:
 def behavior_briefing() -> str:
     eids = _entities_seen(3600 * 24)
     if not eids:
-        return ("▸ BEHAVIOR CLASSIFICATION — PALM COMMAND\n"
+        return ("▸ BEHAVIOR CLASSIFICATION — COMMAND CENTER\n"
                 "▸ No entities observed in the last 24 hours.")
     classifications = [classify_entity(eid) for eid in eids]
     classifications.sort(key=lambda c: -c["confidence"])

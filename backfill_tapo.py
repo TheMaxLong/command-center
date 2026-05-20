@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.12
 """
-PALM COMMAND — Tapo SD-card backfill.
+COMMAND CENTER — Tapo SD-card backfill.
 
 Walks every Tapo camera's on-board SD card recordings, downloads any
 clip not already in the local event DB, extracts a snapshot, runs
@@ -413,7 +413,7 @@ def _load_cameras() -> list[dict]:
 
 
 async def main() -> None:
-    parser = argparse.ArgumentParser(description="PALM COMMAND — Tapo SD backfill")
+    parser = argparse.ArgumentParser(description="COMMAND CENTER — Tapo SD backfill")
     parser.add_argument("--days",       type=int, default=7)
     parser.add_argument("--start",      type=str, default=None)
     parser.add_argument("--end",        type=str, default=None)
@@ -426,7 +426,7 @@ async def main() -> None:
     end_date   = args.end or today
     start_date = args.start or (datetime.now() - timedelta(days=args.days)).strftime("%Y%m%d")
 
-    print(f"PALM COMMAND — Tapo SD backfill", flush=True)
+    print(f"COMMAND CENTER — Tapo SD backfill", flush=True)
     print(f"Range: {start_date} → {end_date}{'  [DRY RUN]' if args.dry_run else ''}", flush=True)
 
     event_db.init_db()
