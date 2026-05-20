@@ -1040,6 +1040,22 @@
       background: rgba(0,212,106,0.06); color: var(--green); cursor: pointer;
     }
     #palantir-send:hover { background: rgba(0,212,106,0.12); border-color: var(--green); }
+    #palantir-mic {
+      font-family: inherit; font-size: 12px;
+      padding: 5px 10px; border: 1px solid rgba(0,212,255,0.3);
+      border-radius: 2px; background: transparent; color: var(--cyan);
+      cursor: pointer; transition: all 200ms;
+    }
+    #palantir-mic:hover { border-color: var(--cyan); background: rgba(0,212,255,0.08); }
+    #palantir-mic.listening {
+      color: var(--red); border-color: var(--red);
+      background: rgba(220, 38, 38, 0.15);
+      animation: pal-mic-pulse 1.1s ease-in-out infinite;
+    }
+    @keyframes pal-mic-pulse {
+      0%,100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+      50%     { box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+    }
 
     /* Quick commands */
     .pal-quick-cmds {
@@ -1382,6 +1398,8 @@
       transition: opacity 200ms;
     }
     #threat-tier-badge:hover { opacity: 1; }
+    #threat-tier-badge { cursor: pointer; user-select: none; }
+    #threat-tier-badge:active { transform: scale(0.96); }
     #operator-badge {
       position: fixed; top: 6px; right: 110px; z-index: 8600;
       font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
@@ -1810,6 +1828,7 @@
     <div id="palantir-input-row">
       <input id="palantir-input" type="text" placeholder="Ask about your cameras, persons, events..." autocomplete="off"
         onkeydown="if(event.key==='Enter')palantirSend()">
+      <button id="palantir-mic" onclick="palantirVoice()" title="Voice query (browser-native, ephemeral)">🎙</button>
       <button id="palantir-send" onclick="palantirSend()">SEND ▶</button>
     </div>
     <div class="pal-quick-cmds">
@@ -4428,6 +4447,61 @@ function palantirQuery(text) {
   palantirSend();
 }
 
+// ── Voice query (browser-native SpeechRecognition, ephemeral) ──────
+let __palMicRec = null;
+function palantirVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById('palantir-mic');
+  const input = document.getElementById('palantir-input');
+  if (!SR) { if (btn) btn.textContent = 'NO MIC'; return; }
+  if (__palMicRec) {
+    try { __palMicRec.stop(); } catch {}
+    __palMicRec = null;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎙'; }
+    return;
+  }
+  const rec = new SR();
+  rec.lang = 'en-US';
+  rec.continuous = false;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  __palMicRec = rec;
+  if (btn) { btn.classList.add('listening'); btn.textContent = '●'; }
+  input.placeholder = 'LISTENING…';
+  rec.onresult = (ev) => {
+    let final = '', interim = '';
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const t = ev.results[i][0].transcript;
+      if (ev.results[i].isFinal) final += t; else interim += t;
+    }
+    if (interim) input.value = interim;
+    if (final) {
+      input.value = final.trim();
+      try { rec.stop(); } catch {}
+    }
+  };
+  rec.onend = () => {
+    __palMicRec = null;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎙'; }
+    input.placeholder = 'Ask about your cameras, persons, events...';
+    if (input.value.trim()) palantirSend();
+  };
+  rec.onerror = (e) => {
+    __palMicRec = null;
+    if (btn) {
+      btn.classList.remove('listening');
+      btn.textContent = e.error === 'not-allowed' ? 'BLOCKED' : '🎙';
+      setTimeout(() => { btn.textContent = '🎙'; }, 2500);
+    }
+    input.placeholder = 'Ask about your cameras, persons, events...';
+  };
+  try { rec.start(); }
+  catch (e) {
+    __palMicRec = null;
+    if (btn) { btn.classList.remove('listening'); btn.textContent = '🎙'; }
+  }
+}
+
 async function palantirSend() {
   const input = document.getElementById('palantir-input');
   const text  = input.value.trim();
@@ -4830,7 +4904,7 @@ setInterval(refreshLightningGlobe, 15000);
 
 <div id="threat-pulse"></div>
 <div id="operator-badge">OPERATOR · …</div>
-<div id="threat-tier-badge">THREAT · …</div>
+<div id="threat-tier-badge" onclick="if(typeof openAIPanel==='function') openAIPanel('brief')" title="Click for full briefing">THREAT · …</div>
 <div id="lightning-globe"></div>
 <div id="op-arrival-banner">
   <div class="opab-title">OPERATOR · ARRIVAL</div>
