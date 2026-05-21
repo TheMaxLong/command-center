@@ -1018,6 +1018,287 @@ def generate_briefing() -> str:
     return "\n".join(lines)
 
 
+# ── GDELT 2.0 — Global Terror / Civil Unrest threat level ────────────
+#
+# Pulls the GDELT 2.0 Event Database every 15 minutes from the public mirror.
+# Filters to political-violence events (CAMEO EventRootCode in {14,17,18,19,20}
+# and QuadClass in {3,4}) and computes a 0–100 threat score with 5 tiers
+# (GREEN/GUARDED/ELEVATED/HIGH/SEVERE), matching ShadowBroker's tier shape.
+#
+# Background thread lazy-starts on first call. If GDELT is unreachable or the
+# latest export isn't published yet, the cached state is returned. No backfill
+# on first run — the rolling 24h deque fills over ~60 min of polls.
+#
+# Source:  http://data.gdeltproject.org/gdeltv2/lastupdate.txt
+# Schema:  http://data.gdeltproject.org/documentation/GDELT-Event_Codebook-V2.0.pdf
+#
+# Column indices used (GDELT 2.0 export, tab-delimited, 61 cols):
+#   28 EventRootCode | 29 QuadClass | 30 GoldsteinScale | 31 NumMentions
+#   34 AvgTone       | 51 ActionGeo_Type | 52 FullName | 53 CountryCode
+#   56 Lat | 57 Long | 59 DATEADDED | 60 SOURCEURL
+
+import csv as _csv
+import io as _io
+import zipfile as _zip
+
+_GDELT_LASTUPDATE_URL = "http://data.gdeltproject.org/gdeltv2/lastupdate.txt"
+_GDELT_POLL_SEC       = int(os.environ.get("GDELT_POLL_SEC", "900"))   # 15 min
+_GDELT_DEQUE_MAX      = int(os.environ.get("GDELT_DEQUE_MAX", "20000"))
+
+_GDELT_UNREST_ROOTS = {"14", "17", "18", "19", "20"}
+_GDELT_TYPE_LABEL = {
+    "14": "PROTEST",
+    "17": "COERCE",
+    "18": "ASSAULT",
+    "19": "FIGHT",
+    "20": "TERROR",
+}
+# (threshold, level, color) — checked top-down
+_GDELT_TIERS = [
+    (80, "SEVERE",   "#ef4444"),
+    (60, "HIGH",     "#f97316"),
+    (40, "ELEVATED", "#eab308"),
+    (20, "GUARDED",  "#3b82f6"),
+    ( 0, "GREEN",    "#22c55e"),
+]
+_GDELT_TIER_DESC = {
+    "GREEN":    "Quiet news cycle",
+    "GUARDED":  "Background unrest level",
+    "ELEVATED": "Notable conflict activity",
+    "HIGH":     "Multiple severe incidents",
+    "SEVERE":   "Major terror / mass violence",
+}
+
+_gdelt_events: deque = deque(maxlen=_GDELT_DEQUE_MAX)
+_gdelt_lock          = threading.Lock()
+_gdelt_thread: Optional[threading.Thread] = None
+_gdelt_started       = False
+_gdelt_status: dict = {
+    "last_pull_ts":    None,
+    "last_pull_count": 0,
+    "last_export_url": None,
+    "_seen_export_url": None,
+    "error":           None,
+    "polls_total":     0,
+    "polls_ok":        0,
+}
+
+
+def _gdelt_fetch(url: str, timeout: float = 15.0) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def _gdelt_pull_latest() -> int:
+    """Pull the latest 15-min GDELT export, filter, and append to deque.
+    Returns the count of new events appended (0 on any failure or duplicate)."""
+    try:
+        body = _gdelt_fetch(_GDELT_LASTUPDATE_URL, timeout=10.0).decode("utf-8", errors="ignore")
+    except Exception as e:
+        _gdelt_status["error"] = f"lastupdate: {e}"
+        return 0
+
+    # lastupdate.txt: 3 lines, first is the EVENT export ("<size> <md5> <url>")
+    first = (body.splitlines() or [""])[0].split()
+    if len(first) < 3:
+        _gdelt_status["error"] = "lastupdate: malformed"
+        return 0
+    export_url = first[-1]
+    _gdelt_status["last_export_url"] = export_url
+
+    # De-dupe — same export as last poll means GDELT hasn't published yet
+    if export_url == _gdelt_status.get("_seen_export_url"):
+        _gdelt_status["error"] = None
+        return 0
+
+    try:
+        zip_bytes = _gdelt_fetch(export_url, timeout=30.0)
+    except Exception as e:
+        _gdelt_status["error"] = f"export: {e}"
+        return 0
+
+    try:
+        with _zip.ZipFile(_io.BytesIO(zip_bytes)) as zf:
+            name = zf.namelist()[0]
+            with zf.open(name) as f:
+                text = f.read().decode("utf-8", errors="ignore")
+    except Exception as e:
+        _gdelt_status["error"] = f"unzip: {e}"
+        return 0
+
+    new_count = 0
+    now = time.time()
+    reader = _csv.reader(_io.StringIO(text), delimiter="\t")
+    for row in reader:
+        if len(row) < 61:
+            continue
+        try:
+            event_root = row[28]
+            if event_root not in _GDELT_UNREST_ROOTS:
+                continue
+            quadclass = int(row[29] or 0)
+            if quadclass not in (3, 4):
+                continue
+            if not row[56] or not row[57]:
+                continue
+            lat = float(row[56])
+            lon = float(row[57])
+            goldstein  = float(row[30] or 0)
+            mentions   = int(row[31] or 0)
+            tone       = float(row[34] or 0)
+            geo_full   = row[52] or ""
+            geo_cc     = row[53] or ""
+            date_added = row[59]
+            source_url = row[60]
+            global_id  = row[0]
+        except (ValueError, IndexError):
+            continue
+
+        # Parse DATEADDED (YYYYMMDDHHMMSS, UTC) → unix
+        try:
+            ts = time.mktime(time.strptime(date_added, "%Y%m%d%H%M%S"))
+        except (ValueError, TypeError):
+            ts = now
+
+        # Event weight for scoring
+        weight = 1.0
+        if quadclass == 4:        # material conflict > verbal
+            weight *= 1.5
+        if event_root == "20":    # mass violence / terror
+            weight *= 3.0
+        elif event_root == "19":  # fight
+            weight *= 1.5
+        if mentions > 1:
+            # Media-attention boost, capped so a single viral event can't dominate
+            weight *= min(1.0 + math.log(mentions) / 4.0, 2.5)
+        if goldstein < 0:
+            weight *= max(1.0, abs(goldstein) / 5.0)
+
+        evt = {
+            "id":         global_id,
+            "ts":         ts,
+            "lat":        lat,
+            "lon":        lon,
+            "country":    geo_cc,
+            "location":   geo_full,
+            "type":       _GDELT_TYPE_LABEL.get(event_root, "INCIDENT"),
+            "root_code":  event_root,
+            "quadclass":  quadclass,
+            "mentions":   mentions,
+            "goldstein":  goldstein,
+            "tone":       tone,
+            "weight":     round(weight, 2),
+            "source_url": source_url,
+        }
+        with _gdelt_lock:
+            _gdelt_events.append(evt)
+        new_count += 1
+
+    _gdelt_status["_seen_export_url"] = export_url
+    _gdelt_status["last_pull_ts"]     = now
+    _gdelt_status["last_pull_count"]  = new_count
+    _gdelt_status["error"]            = None
+    _gdelt_status["polls_ok"]        += 1
+    return new_count
+
+
+def _start_gdelt_poller() -> None:
+    """Background poller — lazy-starts on first call. Idempotent."""
+    global _gdelt_started, _gdelt_thread
+    if _gdelt_started:
+        return
+    _gdelt_started = True
+
+    def _run() -> None:
+        # First pull immediately so the widget isn't empty for 15 minutes
+        try:
+            _gdelt_status["polls_total"] += 1
+            _gdelt_pull_latest()
+        except Exception as e:
+            _gdelt_status["error"] = f"poll: {e}"
+        while True:
+            time.sleep(_GDELT_POLL_SEC)
+            try:
+                _gdelt_status["polls_total"] += 1
+                _gdelt_pull_latest()
+            except Exception as e:
+                _gdelt_status["error"] = f"poll: {e}"
+
+    _gdelt_thread = threading.Thread(target=_run, name="gdelt-poller", daemon=True)
+    _gdelt_thread.start()
+
+
+def _gdelt_compute(window_sec: int = 86400) -> dict:
+    """Score the rolling deque over a window and pick a tier."""
+    now = time.time()
+    cutoff = now - window_sec
+    with _gdelt_lock:
+        events = [e for e in _gdelt_events if (e.get("ts") or 0) >= cutoff]
+
+    if not events:
+        return {
+            "score": 0, "level": "GREEN", "color": "#22c55e",
+            "tier_desc": _GDELT_TIER_DESC["GREEN"],
+            "drivers": [], "events": [], "event_count": 0, "total_weight": 0.0,
+        }
+
+    total_weight = sum(e["weight"] for e in events)
+    # Normalize to weight-per-hour so a partial-data deque (first ~hour after
+    # boot, before 24h of polls have accumulated) still scores correctly.
+    # Calibration target: ~2400 weight/hr on a normal news day ≈ score 40.
+    # Override via GDELT_SCORE_DIVISOR if scores feel off after a week of data.
+    oldest_ts = min(e["ts"] for e in events)
+    actual_hours = max(0.25, (now - oldest_ts) / 3600.0)
+    weight_per_hour = total_weight / actual_hours
+    score_divisor = float(os.environ.get("GDELT_SCORE_DIVISOR", "60"))
+    score = int(min(100, max(0, weight_per_hour / score_divisor)))
+
+    level, color = "GREEN", "#22c55e"
+    for threshold, name, c in _GDELT_TIERS:
+        if score >= threshold:
+            level, color = name, c
+            break
+
+    # Top-5 drivers by individual weight
+    top = sorted(events, key=lambda e: e["weight"], reverse=True)[:5]
+    drivers = []
+    for e in top:
+        ago_min = max(0, int((now - e["ts"]) / 60))
+        loc = e["location"] or e["country"] or "Unknown"
+        drivers.append(f"{e['type']} · {loc} · {ago_min}m ago")
+
+    # Newest 200 events for the heatmap
+    events_sorted = sorted(events, key=lambda e: e["ts"], reverse=True)[:200]
+
+    return {
+        "score":        score,
+        "level":        level,
+        "color":        color,
+        "tier_desc":    _GDELT_TIER_DESC[level],
+        "drivers":      drivers,
+        "events":       events_sorted,
+        "event_count":  len(events),
+        "total_weight": round(total_weight, 1),
+    }
+
+
+def get_threat_global(window_sec: int = 86400) -> dict:
+    """Public entrypoint for the dashboard threat-globe widget."""
+    _start_gdelt_poller()
+    state = _gdelt_compute(window_sec=window_sec)
+    state["status"] = {
+        "last_pull_ts":    _gdelt_status["last_pull_ts"],
+        "last_pull_count": _gdelt_status["last_pull_count"],
+        "polls_total":     _gdelt_status["polls_total"],
+        "polls_ok":        _gdelt_status["polls_ok"],
+        "error":           _gdelt_status["error"],
+    }
+    state["window_sec"] = window_sec
+    state["source"]     = "GDELT 2.0"
+    return state
+
+
 # ── CLI test ──────────────────────────────────────────────────────
 
 if __name__ == "__main__":

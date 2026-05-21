@@ -1356,6 +1356,16 @@ class Handler(BaseHTTPRequestHandler):
             strikes = intel_feeds.get_lightning_global(max_age_seconds=window)
             self._json({"items": strikes, "count": len(strikes), "window_s": window})
 
+        # /feeds/threat-global → GDELT 2.0 global terror / civil unrest threat level
+        # Lazy-starts a background poller (15-min GDELT export pulls).
+        # Returns score (0-100), tier (GREEN..SEVERE), color, drivers, recent events.
+        elif p == "/feeds/threat-global":
+            try:
+                window = int(qp("window_sec") or 86400)
+            except ValueError:
+                window = 86400
+            self._json(intel_feeds.get_threat_global(window_sec=window))
+
         # /feeds/plates       → LPR plate log
         elif p == "/feeds/plates":
             camera = qp("camera")

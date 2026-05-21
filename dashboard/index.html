@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>COMMAND CENTER</title>
+  <title>PALM COMMAND</title>
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
@@ -79,13 +79,14 @@
     #sidebar {
       width: var(--sidebar-w);
       min-width: var(--sidebar-w);
+      min-height: 0;
       background: var(--panel);
       border-right: 1px solid var(--border2);
       display: flex;
       flex-direction: column;
       padding: 10px 0;
       gap: 2px;
-      overflow: hidden;
+      overflow-y: auto;
     }
     .sb-heading {
       font-size: 7px;
@@ -1354,10 +1355,10 @@
       content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
       background: repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px);
     }
-    /* ── Threat-Pulse: ambient peripheral breathing (2026-05-20) ── */
-    /* Viewport edges glow softly with the current aggregate threat tier
-       pulled from /api/feeds. Low-light operator friendly — low saturation,
-       no flashbangs even at RED. Peripheral, not central. */
+    /* ── Threat-Pulse: ambient peripheral breathing (PLAN bonus, 2026-05-20) ── */
+    /* The viewport edges glow softly with the current aggregate threat tier
+       pulled from /api/feeds. Designed to be low-light operator friendly —
+       low saturation, no flashbangs even at RED. Peripheral, not central. */
     #threat-pulse {
       position: fixed; inset: 0; pointer-events: none; z-index: 8500;
       box-shadow: inset 0 0 0 0 transparent;
@@ -1366,7 +1367,7 @@
     html[data-threat-tier="GREEN"]  #threat-pulse { animation: tp-breathe-green  4.0s ease-in-out infinite; }
     html[data-threat-tier="YELLOW"] #threat-pulse { animation: tp-breathe-yellow 2.2s ease-in-out infinite; }
     html[data-threat-tier="ORANGE"] #threat-pulse { animation: tp-breathe-orange 1.4s ease-in-out infinite; }
-    html[data-threat-tier="RED"]    #threat-pulse { animation: tp-breathe-red    0.85s ease-in-out infinite; }
+    html[data-threat-tier="RED"]    #threat-pulse { animation: none; box-shadow: none; }
     @keyframes tp-breathe-green {
       0%, 100% { box-shadow: inset 0 0 32px -8px rgba(0, 184, 217, 0.05); }
       50%      { box-shadow: inset 0 0 48px -8px rgba(0, 184, 217, 0.16); }
@@ -1380,15 +1381,17 @@
       50%      { box-shadow: inset 0 0 80px -2px rgba(217, 119, 6, 0.38); }
     }
     @keyframes tp-breathe-red {
-      0%, 100% { box-shadow: inset 0 0 56px -4px rgba(220, 38, 38, 0.22); }
-      50%      { box-shadow: inset 0 0 96px  2px rgba(220, 38, 38, 0.50); }
+      0%, 100% { box-shadow: inset 0 0 48px -6px rgba(220, 38, 38, 0.14); }
+      50%      { box-shadow: inset 0 0 72px -2px rgba(220, 38, 38, 0.30); }
     }
+    /* Respect user motion preferences — pulse → static glow if they ask. */
     @media (prefers-reduced-motion: reduce) {
       html[data-threat-tier] #threat-pulse {
         animation: none;
         box-shadow: inset 0 0 64px -8px rgba(217, 119, 6, 0.18);
       }
     }
+    /* Tiny live tier readout near header — invisible until you look. */
     #threat-tier-badge {
       position: fixed; top: 6px; right: 8px; z-index: 8600;
       font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
@@ -1413,63 +1416,177 @@
     #operator-badge[data-status="home"]     { color: rgba(0, 184, 217, 0.95); }
     #operator-badge[data-status="deployed"] { color: rgba(232, 178, 30, 0.95); }
     #operator-badge[data-status="unknown"]  { color: rgba(255, 255, 255, 0.55); }
-    /* ── Lightning Globe widget ── */
-    #lightning-globe {
+    /* ── Threat Globe widget — GDELT 2.0 global terror / civil unrest ── */
+    /* Draggable special tile. 4 states: minimized | collapsed | default | expanded.
+       Header is the drag handle. Position + state persist in localStorage.
+       Data: /api/feeds/threat-global (server-side 15-min GDELT poll). */
+    #threat-globe {
       position: fixed; left: 8px; bottom: 30px; z-index: 8550;
-      width: 280px; height: 156px;
+      width: 320px; height: 220px;
       background: linear-gradient(180deg, #02050b 0%, #050912 100%);
-      border: 1px solid rgba(0,212,255,0.18);
+      border: 1px solid rgba(0,212,255,0.22);
       box-shadow: 0 4px 18px rgba(0,0,0,0.65), inset 0 0 28px rgba(0,184,217,0.04);
       font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+      color: rgba(255,255,255,0.85);
+      display: flex; flex-direction: column;
       overflow: hidden;
-      opacity: 0.88;
-      transition: opacity 200ms, transform 200ms;
+      opacity: 0.94;
+      transition: opacity 200ms, box-shadow 200ms;
     }
-    #lightning-globe:hover { opacity: 1; transform: scale(1.02); }
-    #lightning-globe .lg-header {
-      position: absolute; top: 4px; left: 6px; right: 6px; z-index: 2;
-      display: flex; justify-content: space-between; align-items: baseline;
-      font-size: 7px; letter-spacing: 2px; color: var(--cyan); opacity: 0.85;
+    #threat-globe:hover { opacity: 1; }
+    #threat-globe.tg-dragging {
+      opacity: 1;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.85), 0 0 0 1px rgba(0,212,255,0.55);
+    }
+    #threat-globe[data-mode="expanded"]  { width: 720px; height: 460px; }
+    #threat-globe[data-mode="collapsed"] { height: 26px; }
+    #threat-globe[data-mode="collapsed"] .tg-body { display: none; }
+    #threat-globe[data-mode="minimized"] {
+      width: auto; height: auto;
+      background: none; border: none; box-shadow: none;
+    }
+    #threat-globe[data-mode="minimized"] .tg-header,
+    #threat-globe[data-mode="minimized"] .tg-body { display: none; }
+
+    .tg-header {
+      display: flex; align-items: center; gap: 8px;
+      height: 26px; flex: 0 0 26px;
+      padding: 0 6px 0 8px;
+      background: linear-gradient(180deg, rgba(0,40,72,0.45) 0%, rgba(0,20,40,0.55) 100%);
+      border-bottom: 1px solid rgba(0,212,255,0.18);
+      cursor: grab;
+      user-select: none;
+      font-size: 8px; letter-spacing: 1.5px;
+    }
+    #threat-globe.tg-dragging .tg-header { cursor: grabbing; }
+    .tg-title { color: var(--cyan); opacity: 0.85; font-weight: 600; }
+    .tg-tier-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 1px 6px;
+      border: 1px solid currentColor;
+      border-radius: 2px;
+      font-size: 8px; letter-spacing: 1.5px; font-weight: 700;
+    }
+    .tg-tier-pill .tg-dot,
+    .tg-pill .tg-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor;
+    }
+    .tg-tier-pill.tg-pulse .tg-dot,
+    .tg-pill.tg-pulse .tg-dot {
+      animation: tg-pulse 1.8s ease-in-out infinite;
+    }
+    @keyframes tg-pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%     { opacity: 0.4; transform: scale(0.7); }
+    }
+    .tg-spacer { flex: 1 1 auto; }
+    .tg-updated { font-size: 7px; opacity: 0.45; letter-spacing: 1px; }
+    .tg-btn {
+      width: 18px; height: 18px;
+      display: inline-flex; align-items: center; justify-content: center;
+      border: 1px solid rgba(0,212,255,0.22);
+      background: rgba(0,30,50,0.4);
+      color: rgba(0,212,255,0.85);
+      font-family: inherit; font-size: 9px;
+      cursor: pointer; padding: 0;
+      transition: background 120ms, color 120ms, border-color 120ms;
+    }
+    .tg-btn:hover {
+      background: rgba(0,80,120,0.5); color: #fff;
+      border-color: rgba(0,212,255,0.7);
+    }
+
+    .tg-body {
+      flex: 1 1 auto;
+      display: flex; flex-direction: row;
+      min-height: 0;
+    }
+    .tg-map-wrap {
+      flex: 1 1 auto; position: relative; min-width: 0;
+      background: radial-gradient(circle at 50% 60%, rgba(0,40,60,0.35) 0%, transparent 60%);
+    }
+    .tg-map { width: 100%; height: 100%; display: block; }
+    .tg-coast {
+      fill: none; stroke: rgba(0,184,217,0.22);
+      stroke-width: 0.4; stroke-linecap: round; stroke-linejoin: round;
       pointer-events: none;
     }
-    #lightning-globe .lg-count { color: rgba(232, 178, 30, 0.95); }
-    #lightning-globe svg { width: 100%; height: 100%; display: block; }
-    .lg-coast {
-      fill: none;
-      stroke: rgba(0, 184, 217, 0.22);
-      stroke-width: 0.4;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-      pointer-events: none;
+    .tg-evt { fill-opacity: 0.85; }
+    .tg-evt-terror   { fill: #ef4444; color: #ef4444; filter: drop-shadow(0 0 4px #ef4444); }
+    .tg-evt-fight    { fill: #f97316; color: #f97316; filter: drop-shadow(0 0 3px #f97316); }
+    .tg-evt-assault  { fill: #eab308; color: #eab308; filter: drop-shadow(0 0 2px #eab308); }
+    .tg-evt-protest  { fill: #3b82f6; color: #3b82f6; filter: drop-shadow(0 0 2px #3b82f6); }
+    .tg-evt-coerce   { fill: #94a3b8; color: #94a3b8; }
+    .tg-home-pin {
+      fill: rgba(0,212,255,1);
+      filter: drop-shadow(0 0 4px rgba(0,212,255,0.75));
     }
-    .lg-strike {
-      fill: rgba(255, 220, 90, 1);
-      filter: drop-shadow(0 0 4px rgba(255, 220, 90, 0.95));
-      animation: lg-strike-fade 8s linear forwards;
+    .tg-side {
+      flex: 0 0 280px;
+      display: none;
+      flex-direction: column;
+      padding: 8px 10px;
+      border-left: 1px solid rgba(0,212,255,0.15);
+      background: rgba(0,8,18,0.55);
+      overflow: hidden;
     }
-    @keyframes lg-strike-fade {
-      0%   { opacity: 1; r: 2.4; }
-      20%  { opacity: 0.85; r: 1.7; }
-      100% { opacity: 0.15; r: 1.0; }
+    #threat-globe[data-mode="expanded"] .tg-side { display: flex; }
+    .tg-score-block { margin-bottom: 6px; }
+    .tg-tier-big {
+      font-size: 22px; font-weight: 700; letter-spacing: 3px; line-height: 1.1;
     }
-    .lg-home {
-      fill: rgba(0, 212, 255, 1);
-      filter: drop-shadow(0 0 6px rgba(0, 212, 255, 0.8));
-      animation: lg-home-pulse 2.2s ease-in-out infinite;
+    .tg-score-big {
+      font-size: 10px; letter-spacing: 1px; opacity: 0.7; margin-top: 2px;
     }
-    @keyframes lg-home-pulse {
-      0%,100% { opacity: 1; r: 2.2; }
-      50%     { opacity: 0.5; r: 3.6; }
+    .tg-tier-desc {
+      font-size: 9px; letter-spacing: 0.8px; opacity: 0.55; margin-top: 4px;
     }
-    .lg-home-ring {
-      fill: none; stroke: rgba(0, 212, 255, 0.4); stroke-width: 0.5;
-      animation: lg-home-ring 3s ease-out infinite;
+    .tg-section-title {
+      font-size: 7px; letter-spacing: 2px;
+      color: var(--cyan); opacity: 0.7;
+      margin: 8px 0 4px;
+      border-bottom: 1px dotted rgba(0,212,255,0.18);
+      padding-bottom: 2px;
     }
-    @keyframes lg-home-ring {
-      0%   { r: 2; opacity: 0.7; }
-      100% { r: 12; opacity: 0; }
+    .tg-drivers, .tg-events {
+      list-style: none; margin: 0; padding: 0;
+      font-size: 9px; line-height: 1.4;
+      overflow-y: auto;
     }
-    /* ── Operator-arrival banner ── */
+    .tg-drivers { max-height: 90px; }
+    .tg-events  { flex: 1 1 auto; min-height: 0; }
+    .tg-drivers li {
+      padding: 2px 0; opacity: 0.85;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .tg-events li {
+      display: flex; gap: 6px; padding: 2px 0;
+      border-bottom: 1px dotted rgba(255,255,255,0.05);
+    }
+    .tg-evt-type {
+      flex: 0 0 50px; font-weight: 700; letter-spacing: 1px; font-size: 8px;
+    }
+    .tg-evt-loc { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; opacity: 0.75; }
+    .tg-evt-ago { flex: 0 0 auto; opacity: 0.45; font-size: 8px; }
+
+    .tg-pill {
+      display: none;
+      align-items: center; gap: 6px;
+      height: 22px; padding: 0 10px;
+      background: linear-gradient(180deg, rgba(0,40,72,0.85) 0%, rgba(0,20,40,0.9) 100%);
+      border: 1px solid currentColor;
+      color: rgba(255,255,255,0.85);
+      font-family: inherit;
+      font-size: 9px; letter-spacing: 1.5px; font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      user-select: none;
+    }
+    .tg-pill:hover { filter: brightness(1.2); }
+    #threat-globe[data-mode="minimized"] .tg-pill { display: inline-flex; }
+
+    /* ── Operator-arrival banner (auto-brief on dashboard wake) ── */
     #op-arrival-banner {
       position: fixed; top: 38px; right: 8px; left: auto; z-index: 9100;
       max-width: 360px;
@@ -1486,15 +1603,24 @@
       0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.7), inset 0 0 24px rgba(0,184,217,0.08); }
       50%      { box-shadow: 0 8px 24px rgba(0,0,0,0.7), inset 0 0 28px rgba(0,184,217,0.22); }
     }
-    #op-arrival-banner .opab-title { font-size: 9px; letter-spacing: 3px; color: var(--cyan); margin-bottom: 6px; }
-    #op-arrival-banner .opab-body { font-size: 10px; line-height: 1.4; color: var(--text); margin-bottom: 10px; }
+    #op-arrival-banner .opab-title {
+      font-size: 9px; letter-spacing: 3px; color: var(--cyan);
+      margin-bottom: 6px;
+    }
+    #op-arrival-banner .opab-body {
+      font-size: 10px; line-height: 1.4; color: var(--text);
+      margin-bottom: 10px;
+    }
     #op-arrival-banner .opab-btn {
-      background: transparent; border: 1px solid var(--cyan); color: var(--cyan);
-      font-family: inherit; font-size: 9px; padding: 6px 12px;
-      cursor: pointer; letter-spacing: 2px; margin-right: 6px;
+      background: transparent; border: 1px solid var(--cyan);
+      color: var(--cyan); font-family: inherit; font-size: 9px;
+      padding: 6px 12px; cursor: pointer; letter-spacing: 2px;
+      margin-right: 6px;
     }
     #op-arrival-banner .opab-btn:hover { background: rgba(0, 212, 255, 0.1); }
-    #op-arrival-banner .opab-dismiss { border-color: rgba(255,255,255,0.25); color: rgba(255,255,255,0.6); }
+    #op-arrival-banner .opab-dismiss {
+      border-color: rgba(255, 255, 255, 0.25); color: rgba(255, 255, 255, 0.6);
+    }
     html[data-threat-tier="GREEN"]  #threat-tier-badge { color: rgba(0, 184, 217, 0.85); }
     html[data-threat-tier="YELLOW"] #threat-tier-badge { color: rgba(232, 178, 30, 0.85); }
     html[data-threat-tier="ORANGE"] #threat-tier-badge { color: rgba(217, 119, 6, 0.95); }
@@ -1525,7 +1651,7 @@
       0%   { transform: translateX(0); }
       100% { transform: translateX(-100%); }
     }
-    body { padding-bottom: 22px; }
+    body { padding-bottom: 22px; }  /* don't let the ticker cover content */
   </style>
 </head>
 <body>
@@ -1534,7 +1660,7 @@
 <div id="header">
   <div class="hdr-left">
     <div>
-      <div class="logo">COMMAND CENTER</div>
+      <div class="logo">PALM COMMAND</div>
       <div class="logo-sub">SITUATIONAL AWARENESS SYSTEM</div>
     </div>
     <div class="divider"></div>
@@ -1806,14 +1932,14 @@
 <div id="palantir-panel">
   <div id="palantir-header">
     <div class="pal-title">PALANTIR</div>
-    <div class="pal-sub">TACTICAL AI SECURITY ANALYST · COMMAND CENTER v1.2</div>
+    <div class="pal-sub">TACTICAL AI SECURITY ANALYST · PALM COMMAND v1.2</div>
     <button id="palantir-close" onclick="closePalantir()">✕ CLOSE</button>
   </div>
   <div id="palantir-history">
     <!-- Welcome message -->
     <div class="pal-msg-agent">
       <div class="pal-label-agent">PALANTIR ·</div>
-      <div class="pal-text-agent">▸ PALANTIR online. COMMAND CENTER AI Security Analyst active.
+      <div class="pal-text-agent">▸ PALANTIR online. PALM COMMAND AI Security Analyst active.
 ▸ I have access to your camera events, person profiles, activity trends, and anomaly data.
 ▸ Ask me anything about your surveillance system.
 ▸ Type <span style="color:var(--green-dim)">'help'</span> for full command reference.</div>
@@ -1823,7 +1949,7 @@
   <div id="palantir-input-wrap">
     <div class="pal-prompt-line">
       <span>OPERATOR QUERY</span>
-      <span id="pal-llm-badge">RULE-BASED ENGINE</span>
+      <span id="pal-llm-badge">PALANTIR · STANDBY</span>
     </div>
     <div id="palantir-input-row">
       <input id="palantir-input" type="text" placeholder="Ask about your cameras, persons, events..." autocomplete="off"
@@ -1865,7 +1991,7 @@
 <!-- ── AI INTEL OVERLAY ── -->
 <div id="ai-overlay">
   <div id="ai-overlay-header">
-    <div class="title">AI INTEL · COMMAND CENTER</div>
+    <div class="title">AI INTEL · PALM COMMAND</div>
     <button id="ai-close" onclick="closeAIPanel()">✕ CLOSE</button>
   </div>
   <div id="ai-tabs">
@@ -1878,7 +2004,6 @@
     <button class="ai-tab"        id="tab-alerts"   onclick="switchAITab('alerts')">ALERTS</button>
     <button class="ai-tab"        id="tab-storage"  onclick="switchAITab('storage')">STORAGE</button>
     <button class="ai-tab"        id="tab-gait"     onclick="switchAITab('gait')">GAIT BIO</button>
-    <button class="ai-tab"        id="tab-mocap"    onclick="switchAITab('mocap')">MOCAP INTAKE</button>
     <button class="ai-tab"        id="tab-sentinel" onclick="switchAITab('sentinel')">SENTINEL</button>
     <button class="ai-tab"        id="tab-brief"    onclick="switchAITab('brief')">MORNING BRIEF</button>
     <button class="ai-tab"        id="tab-baseline" onclick="switchAITab('baseline')">BASELINE</button>
@@ -1897,7 +2022,7 @@
 <!-- ── FOOTER ── -->
 <div id="footer">
   <div class="footer-left">
-    <span>COMMAND CENTER v1.2</span>
+    <span>PALM COMMAND v1.2</span>
     <span style="color:var(--border)">|</span>
     <span>go2rtc · <a href="/go2rtc/" target="_blank" style="color:inherit;text-decoration:none">:1984</a></span>
     <span style="color:var(--border)">|</span>
@@ -2812,7 +2937,6 @@ function switchAITab(tab) {
   else if (tab === 'alerts')   loadAlerts();
   else if (tab === 'storage')  loadStorage();
   else if (tab === 'gait')     loadGait();
-  else if (tab === 'mocap')    loadMocapIntake();
   else if (tab === 'sentinel') loadSentinel();
   else if (tab === 'brief')    loadMorningBrief();
   else if (tab === 'baseline') loadBaseline();
@@ -2831,8 +2955,11 @@ async function loadBaseline() {
     const grid = data.grid || [];
     const days = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
     const hasBaseline = (data.baseline_n_weeks || 0) >= 1;
+
+    // Max current count to scale activity-density fallback colors
     let maxCurrent = 1;
     for (const c of grid) if (c.count_current > maxCurrent) maxCurrent = c.count_current;
+
     const cellColor = (c) => {
       if (hasBaseline && c.z_score != null) {
         const az = Math.abs(c.z_score);
@@ -2842,25 +2969,32 @@ async function loadBaseline() {
         if (c.count_current > 0) return 'rgba(0,184,217,0.35)';
         return 'rgba(0,184,217,0.05)';
       }
+      // Activity density fallback (no baseline yet)
       if (!c.count_current) return 'rgba(0,184,217,0.04)';
       const pct = c.count_current / maxCurrent;
       const alpha = (0.10 + pct * 0.70).toFixed(2);
       return `rgba(0,184,217,${alpha})`;
     };
+
     let html = `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:baseline;">
       <span>ANOMALY BASELINE · 7×24 RHYTHM HEATMAP</span>
       <span style="color:var(--dim);letter-spacing:1px;">week ${data.current_week} · baseline ${data.baseline_n_weeks}w · ${data.sample_count} events</span>
     </div>`;
+
     if (!hasBaseline) {
       html += `<div style="color:var(--orange,#d97706);font-size:9px;letter-spacing:1px;background:rgba(217,119,6,0.08);border-left:2px solid var(--orange,#d97706);padding:6px 10px;margin-bottom:10px;">
         BASELINE STILL FORMING · need ≥1 full prior week. Showing raw activity-density. Z-score coloring activates once history accumulates.
       </div>`;
     }
+
+    // Grid: hour columns × day rows. Tiny cells.
     html += `<div style="display:grid;grid-template-columns: 28px repeat(24, 1fr);gap:1px;font-family:'JetBrains Mono',monospace;font-size:7px;letter-spacing:1px;">`;
+    // Header row: hour labels
     html += `<div></div>`;
     for (let h = 0; h < 24; h++) {
       html += `<div style="color:var(--dim);text-align:center;line-height:14px;">${h}</div>`;
     }
+    // Day rows
     for (let d = 0; d < 7; d++) {
       html += `<div style="color:var(--dim);line-height:14px;">${days[d]}</div>`;
       for (let h = 0; h < 24; h++) {
@@ -2873,6 +3007,8 @@ async function loadBaseline() {
       }
     }
     html += `</div>`;
+
+    // Top anomalies block (when baseline exists)
     if ((data.top_anomalies || []).length) {
       html += `<div style="margin-top:14px;font-size:8px;color:var(--cyan);letter-spacing:2px;">TOP ANOMALIES (|z|≥1.5)</div>`;
       html += `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;">`;
@@ -2887,7 +3023,10 @@ async function loadBaseline() {
       }
       html += `</div>`;
     }
+
+    // Drill-down placeholder
     html += `<div id="baseline-drill" style="margin-top:14px;font-size:9px;color:var(--dim);"></div>`;
+
     body.innerHTML = html;
   } catch (err) {
     body.innerHTML = `<div style="color:var(--red);padding:20px;font-size:10px;">BASELINE UNAVAILABLE · ${err.message || err}</div>`;
@@ -2933,15 +3072,18 @@ async function loadMorningBrief(force=false) {
     const url = '/api/intel/morning-brief' + (force ? '?force=1' : '');
     const res = await fetch(url);
     const data = await res.json();
+
     if (data.error) {
       body.innerHTML = `<div style="color:var(--red);padding:20px;font-size:10px;">BRIEF ENGINE ERROR · ${data.error}</div>`;
       return;
     }
+
     const sections = (data.brief || '').split(/\*\*([A-Z]+)\*\*/g).filter(Boolean);
     const generated = data.generated_at
       ? new Date(data.generated_at * 1000).toLocaleString('en-US', { hour12: false })
       : 'unknown';
     const ttl = Math.max(0, Math.round((data.ttl_remaining || 0) / 60));
+
     let html = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;border-bottom:1px solid rgba(0,212,255,0.15);padding-bottom:8px;">
       <div>
         <span style="color:var(--cyan);letter-spacing:2px;font-size:9px;">MORNING BRIEF</span>
@@ -2952,12 +3094,15 @@ async function loadMorningBrief(force=false) {
         <button onclick="loadMorningBrief(true)" style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:inherit;font-size:8px;padding:4px 10px;cursor:pointer;letter-spacing:1px;">REGENERATE</button>
       </div>
     </div>`;
+
+    // Render section/body pairs
     let i = 0;
     while (i < sections.length) {
       const piece = sections[i];
       if (/^[A-Z]+$/.test(piece) && sections[i+1]) {
         const head = piece;
         let text = sections[i+1].replace(/^[\s—-]+/, '').trim();
+        // Pick accent color per section
         const accent = head === 'THREAT' ? 'var(--red)'
           : head === 'PRESENCE' ? 'var(--cyan)'
           : head === 'WORLD' ? '#9ad0ff'
@@ -2974,6 +3119,7 @@ async function loadMorningBrief(force=false) {
         i += 1;
       }
     }
+
     const summary = data.input_summary || {};
     html += `<div style="margin-top:18px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.05);font-size:8px;color:var(--dim);letter-spacing:1px;">
       INPUTS: threat=${summary.threat_level||'?'} · events=${summary.total_events||0} · persons=${summary.persons_seen||0} · aqi=${summary.aqi_status||'?'} · strikes=${summary.lightning_count||0}
@@ -2981,6 +3127,7 @@ async function loadMorningBrief(force=false) {
     <div style="margin-top:8px;font-size:8px;color:var(--dim);letter-spacing:1px;">
       Brief generated by local Ollama. No external calls, no telemetry.
     </div>`;
+
     body.innerHTML = html;
     window.__lastBrief = data.brief || '';
   } catch (err) {
@@ -2993,7 +3140,10 @@ window.__briefSpeaking = false;
 function toggleBriefTTS() {
   const btn = document.getElementById('brief-tts-btn');
   const synth = window.speechSynthesis;
-  if (!synth) { if (btn) btn.textContent = 'TTS UNSUPPORTED'; return; }
+  if (!synth) {
+    if (btn) btn.textContent = 'TTS UNSUPPORTED';
+    return;
+  }
   if (window.__briefSpeaking) {
     synth.cancel();
     window.__briefSpeaking = false;
@@ -3001,7 +3151,11 @@ function toggleBriefTTS() {
     return;
   }
   const brief = window.__lastBrief || '';
-  if (!brief) { if (btn) btn.textContent = 'NO BRIEF YET'; return; }
+  if (!brief) {
+    if (btn) btn.textContent = 'NO BRIEF YET';
+    return;
+  }
+  // Pick the most serious-sounding voice on the system.
   const pickVoice = () => {
     const voices = synth.getVoices() || [];
     const prefer = ['Daniel', 'Oliver', 'Aaron', 'Fred', 'Bruce', 'Alex', 'Tom'];
@@ -3012,22 +3166,30 @@ function toggleBriefTTS() {
     return voices.find(v => /en[-_]/i.test(v.lang)) || voices[0];
   };
   const voice = pickVoice();
+  // Speak section-by-section with a brief pause between (sectioned by **HEAD**).
   const segments = [];
   const parts = brief.split(/\*\*([A-Z]+)\*\*/g).filter(Boolean);
   for (let i = 0; i < parts.length; i++) {
     const head = parts[i];
     if (/^[A-Z]+$/.test(head) && parts[i+1]) {
-      segments.push({ head, body: parts[i+1].replace(/^[\s—-]+/, '').trim() });
+      const body = parts[i+1].replace(/^[\s—-]+/, '').trim();
+      segments.push({ head, body });
       i += 1;
     }
   }
-  if (!segments.length) segments.push({ head: 'BRIEF', body: brief });
+  if (!segments.length) {
+    segments.push({ head: 'BRIEF', body: brief });
+  }
+
   window.__briefSpeaking = true;
   if (btn) btn.textContent = '■ STOP';
+
+  // Pre-roll callsign
   const callsign = new SpeechSynthesisUtterance('Operator. Briefing follows.');
   if (voice) callsign.voice = voice;
   callsign.rate = 0.95; callsign.pitch = 0.85;
   synth.speak(callsign);
+
   segments.forEach(seg => {
     const u1 = new SpeechSynthesisUtterance(seg.head + '.');
     const u2 = new SpeechSynthesisUtterance(seg.body);
@@ -3053,6 +3215,7 @@ async function loadSentinel() {
   try {
     const res  = await fetch('/api/sentinel-digest');
     const data = await res.json();
+    const synced = data.last_synced || 'never';
     const entries = data.entries || [];
 
     const ageMin = (() => {
@@ -3809,7 +3972,7 @@ async function loadDroneOps() {
           <div class="ops-section">
             <div class="ops-title"><span>REAL DJI INTEGRATION PATH</span><span>ANDROID / DOCK</span></div>
             <div style="color:var(--text);font-size:8px;line-height:1.9;letter-spacing:0.8px;">
-              DJI consumer and enterprise control generally needs a native Android bridge via DJI Mobile SDK, or a DJI Dock / FlightHub style cloud bridge for docked enterprise aircraft. COMMAND CENTER should own mission intent, audit, video review, and alerts; the bridge should own aircraft safety, geofence checks, telemetry, and manual pilot takeover.
+              DJI consumer and enterprise control generally needs a native Android bridge via DJI Mobile SDK, or a DJI Dock / FlightHub style cloud bridge for docked enterprise aircraft. PALM COMMAND should own mission intent, audit, video review, and alerts; the bridge should own aircraft safety, geofence checks, telemetry, and manual pilot takeover.
             </div>
           </div>
           <div class="ops-section">
@@ -4371,119 +4534,6 @@ async function loadGait() {
   }
 }
 
-function loadMocapIntake() {
-  const body = document.getElementById('ai-body');
-  body.innerHTML = `
-    <div style="padding:20px;">
-      <div style="font-size:10px;color:var(--cyan);letter-spacing:2px;margin-bottom:20px;">
-        MOCAP INTAKE · FREEMOCAP SKELETON EXTRACTION
-      </div>
-
-      <div style="border:2px dashed var(--border);border-radius:8px;padding:40px;text-align:center;cursor:pointer;transition:all 0.2s;"
-           id="mocap-drop-zone"
-           ondragover="event.preventDefault(); this.style.borderColor='var(--cyan)'; this.style.background='rgba(0,212,255,0.05)'"
-           ondragleave="this.style.borderColor='var(--border)'; this.style.background='transparent'"
-           ondrop="handleMocapDrop(event)">
-        <div style="font-size:14px;color:var(--text-bright);margin-bottom:8px;">DRAG VIDEO HERE</div>
-        <div style="font-size:8px;color:var(--dim);letter-spacing:1px;">or click to browse</div>
-        <input type="file" id="mocap-file-input" accept="video/*" style="display:none;" onchange="handleMocapFileSelect(event)" />
-      </div>
-
-      <div style="margin-top:20px;font-size:8px;color:var(--dim);letter-spacing:1px;line-height:1.6;">
-        Supported: MP4, MOV, AVI, MKV<br/>
-        Output: BVH skeleton + preview video<br/>
-        Doorbell clips auto-ingested to mocap-from-doorbell/
-      </div>
-
-      <div id="mocap-jobs" style="margin-top:30px;"></div>
-    </div>
-
-    <script>
-      function handleMocapDrop(e) {
-        e.preventDefault();
-        const dropZone = document.getElementById('mocap-drop-zone');
-        dropZone.style.borderColor = 'var(--border)';
-        dropZone.style.background = 'transparent';
-        const files = e.dataTransfer.files;
-        if (files.length > 0) uploadMocapFile(files[0]);
-      }
-
-      document.getElementById('mocap-drop-zone').addEventListener('click', () => {
-        document.getElementById('mocap-file-input').click();
-      });
-
-      function handleMocapFileSelect(e) {
-        if (e.target.files.length > 0) uploadMocapFile(e.target.files[0]);
-      }
-
-      async function uploadMocapFile(file) {
-        const dropZone = document.getElementById('mocap-drop-zone');
-        dropZone.innerHTML = '<div style="color:var(--cyan);">UPLOADING...</div>';
-
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
-
-          const res = await fetch('/mocap/upload', { method: 'POST', body: formData });
-          const data = await res.json();
-
-          if (data.job_id) {
-            pollMocapJob(data.job_id);
-          } else {
-            dropZone.innerHTML = '<div style="color:var(--red);">UPLOAD FAILED</div>';
-          }
-        } catch (e) {
-          dropZone.innerHTML = '<div style="color:var(--red);">ERROR: ' + String(e).slice(0,50) + '</div>';
-        }
-      }
-
-      async function pollMocapJob(jobId) {
-        const dropZone = document.getElementById('mocap-drop-zone');
-        let pollCount = 0;
-        const maxPolls = 3600; // 1 hour at 1s intervals
-
-        const poll = async () => {
-          try {
-            const res = await fetch('/mocap/status/' + jobId);
-            const job = await res.json();
-
-            if (job.status === 'done') {
-              dropZone.innerHTML = '<div style="color:var(--green);">DONE · OUTPUT: ' + job.output_dir + '</div>';
-              addMocapJobRow(job);
-            } else if (job.status === 'error') {
-              dropZone.innerHTML = '<div style="color:var(--red);">ERROR: ' + job.error + '</div>';
-            } else if (job.status === 'processing') {
-              dropZone.innerHTML = '<div style="color:var(--cyan);">PROCESSING...</div>';
-              pollCount++;
-              if (pollCount < maxPolls) setTimeout(poll, 1000);
-            } else {
-              pollCount++;
-              if (pollCount < maxPolls) setTimeout(poll, 1000);
-            }
-          } catch (e) {
-            pollCount++;
-            if (pollCount < maxPolls) setTimeout(poll, 5000);
-          }
-        };
-        poll();
-      }
-
-      function addMocapJobRow(job) {
-        const jobs = document.getElementById('mocap-jobs');
-        const row = document.createElement('div');
-        row.style.cssText = 'background:rgba(0,212,255,0.03);border:1px solid var(--border);padding:12px;margin-bottom:8px;border-radius:4px;font-size:8px;letter-spacing:1px;';
-        row.innerHTML = \`
-          <div style="color:var(--cyan);margin-bottom:4px;">\${job.job_id}</div>
-          <div style="color:var(--dim);">FILE: \${job.input_file}</div>
-          <div style="color:var(--green);">STATUS: \${job.status}</div>
-          <div style="color:var(--text);margin-top:4px;">OUTPUT: \${job.output_dir || '—'}</div>
-        \`;
-        jobs.insertBefore(row, jobs.firstChild);
-      }
-    </script>
-  `;
-}
-
 function _timeAgo(ts) {
   const s = Math.floor(Date.now() / 1000 - ts);
   if (s < 60)   return `${s}S AGO`;
@@ -4556,12 +4606,19 @@ function palantirQuery(text) {
 }
 
 // ── Voice query (browser-native SpeechRecognition, ephemeral) ──────
+// Button-gated (not wake-word) — POLICY: no continuous listening,
+// no server-side transcription. Recognition happens in the browser,
+// the resulting text fills the PALANTIR input. Nothing is stored.
 let __palMicRec = null;
 function palantirVoice() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btn = document.getElementById('palantir-mic');
   const input = document.getElementById('palantir-input');
-  if (!SR) { if (btn) btn.textContent = 'NO MIC'; return; }
+  if (!SR) {
+    if (btn) btn.textContent = 'NO MIC';
+    return;
+  }
+  // Already listening — stop.
   if (__palMicRec) {
     try { __palMicRec.stop(); } catch {}
     __palMicRec = null;
@@ -4570,7 +4627,7 @@ function palantirVoice() {
   }
   const rec = new SR();
   rec.lang = 'en-US';
-  rec.continuous = false;
+  rec.continuous = false;     // single utterance
   rec.interimResults = true;
   rec.maxAlternatives = 1;
   __palMicRec = rec;
@@ -4580,7 +4637,8 @@ function palantirVoice() {
     let final = '', interim = '';
     for (let i = ev.resultIndex; i < ev.results.length; i++) {
       const t = ev.results[i][0].transcript;
-      if (ev.results[i].isFinal) final += t; else interim += t;
+      if (ev.results[i].isFinal) final += t;
+      else interim += t;
     }
     if (interim) input.value = interim;
     if (final) {
@@ -4644,10 +4702,11 @@ async function palantirSend() {
     const badge = document.getElementById('pal-llm-badge');
     if (badge) {
       if (data.has_llm) {
-        badge.textContent = 'LLM ACTIVE';
+        badge.textContent = 'PALANTIR · LIVE';
         badge.classList.add('active');
       } else {
-        badge.textContent = 'RULE ENGINE';
+        badge.textContent = 'PALANTIR · RULE-BASED';
+        badge.classList.remove('active');
       }
     }
   } catch {
@@ -4783,9 +4842,13 @@ for (let i = 0; i < tileCount; i++) {
 }
 
 // ── Clermont status ticker (PLAN 2.16) ─────────────────────────────
+// Builds one continuous scrolling line from doorbell brightness, AQI,
+// weather, lightning, last motion, Sentinel digest. Hover pauses scroll.
 async function refreshStatusTicker() {
   const track = document.getElementById('status-ticker-track');
   if (!track) return;
+
+  // Fetch everything in parallel, swallow individual failures.
   const safe = (p) => p.then(r => r.ok ? r.json() : null).catch(() => null);
   const [bright, aqi, weather, lightning, events, sentinel] = await Promise.all([
     safe(fetch('/api/local/doorbell-brightness')),
@@ -4795,30 +4858,35 @@ async function refreshStatusTicker() {
     safe(fetch('/api/events?limit=1')),
     safe(fetch('/api/sentinel-digest')),
   ]);
+
   const segs = [];
   const sep = '<span class="tk-sep">·</span>';
-  const k = (label, val, cls = 'tk-ok') =>
+  const k   = (label, val, cls = 'tk-ok') =>
     `<span class="tk-key">${label}</span><span class="${cls}">${val}</span>`;
 
+  // Doorbell brightness
   if (bright) {
     const pct = bright.last_brightness_pct;
     const state = bright.state || 'OK';
-    if (pct == null) segs.push(k('DOORBELL', state));
-    else {
+    if (pct == null) {
+      segs.push(k('DOORBELL', state));
+    } else {
       const cls = state === 'ALERTED' ? 'tk-crit' : pct < 5 ? 'tk-warn' : 'tk-ok';
       segs.push(k('DOORBELL', `${pct.toFixed(1)}% ${state}`, cls));
     }
   }
+
+  // Last motion event age
   if (events && events.length) {
     const ts = events[0].ts;
     if (ts) {
       const ageMin = Math.round((Date.now() / 1000 - ts) / 60);
-      const lbl = ageMin < 60 ? `${ageMin}m AGO`
-        : ageMin < 1440 ? `${(ageMin/60).toFixed(1)}h AGO`
-        : `${(ageMin/1440).toFixed(1)}d AGO`;
+      const lbl = ageMin < 60 ? `${ageMin}m AGO` : ageMin < 1440 ? `${(ageMin/60).toFixed(1)}h AGO` : `${(ageMin/1440).toFixed(1)}d AGO`;
       segs.push(k('LAST MOTION', lbl));
     }
   }
+
+  // AQI
   if (aqi) {
     if (aqi.status === 'ok') {
       const m = aqi.median_aqi;
@@ -4829,11 +4897,15 @@ async function refreshStatusTicker() {
       segs.push(k('AQI', 'set PURPLEAIR_API_KEY', 'tk-warn'));
     }
   }
+
+  // Weather alerts (count)
   if (weather && weather.items) {
     const n = weather.items.length;
     const cls = n > 0 ? 'tk-warn' : 'tk-ok';
     segs.push(k('WX', n ? `${n} ALERT${n>1?'S':''}` : 'CLEAR', cls));
   }
+
+  // Lightning
   if (lightning && lightning.summary) {
     const s = lightning.summary;
     const n = s.strike_count || 0;
@@ -4846,6 +4918,8 @@ async function refreshStatusTicker() {
       segs.push(k('LIGHTNING', mqtt.connected ? 'NONE' : 'MQTT DOWN', cls));
     }
   }
+
+  // Sentinel latest digest entry
   if (sentinel && sentinel.entries && sentinel.entries.length) {
     const last = sentinel.entries[0];
     const cls = last.level === 'critical' ? 'tk-crit' : last.level === 'warn' ? 'tk-warn' : 'tk-ok';
@@ -4853,11 +4927,13 @@ async function refreshStatusTicker() {
     segs.push(k('SENTINEL', `${last.watcher.toUpperCase()}: ${msg}`, cls));
   }
 
+  // Render
   if (segs.length) {
     const oneRun = segs.join(sep);
+    // Duplicate so the loop seam is invisible
     track.innerHTML = oneRun + sep + oneRun + sep;
   } else {
-    track.innerHTML = '<span class="tk-key">COMMAND CENTER</span><span class="tk-ok">no feeds available</span>';
+    track.innerHTML = '<span class="tk-key">PALM COMMAND</span><span class="tk-ok">no feeds available</span>';
   }
 }
 refreshStatusTicker();
@@ -4906,25 +4982,40 @@ refreshOperator();
 setInterval(refreshOperator, 60000);
 
 // ── Operator-arrival auto-brief ────────────────────────────────────
+// On dashboard load: if no brief acknowledged in last 6h, show a banner
+// that triggers brief load + TTS readout. Browser autoplay policy requires
+// a user gesture, so the banner button doubles as the gate.
 async function maybeShowArrivalBanner() {
   const STORAGE_KEY = 'palm.lastBriefAckedAt';
   const lastAcked = parseFloat(localStorage.getItem(STORAGE_KEY) || '0');
   const sixHoursMs = 6 * 60 * 60 * 1000;
   if (Date.now() - lastAcked < sixHoursMs) return;
+
+  // Pre-warm the brief in the background — when the user clicks, it's ready.
   fetch('/api/intel/morning-brief').catch(()=>{});
+
   const banner = document.getElementById('op-arrival-banner');
   if (!banner) return;
+
+  // Operator-status text in the body
   let opLabel = 'OPERATOR';
   try {
     const r = await fetch('/api/local/operator');
-    if (r.ok) { const d = await r.json(); opLabel = d.label || 'OPERATOR'; }
+    if (r.ok) {
+      const d = await r.json();
+      opLabel = d.label || 'OPERATOR';
+    }
   } catch {}
+
   banner.querySelector('.opab-title').textContent = `${opLabel} · ARRIVAL`;
   banner.classList.add('show');
+
   banner.querySelector('.opab-play').onclick = async () => {
     banner.classList.remove('show');
     localStorage.setItem(STORAGE_KEY, String(Date.now()));
+    // Switch to the brief tab and play
     if (typeof openAIPanel === 'function') openAIPanel('brief');
+    // loadMorningBrief sets window.__lastBrief; poll briefly for it then speak.
     for (let i = 0; i < 60; i++) {
       if (window.__lastBrief) break;
       await new Promise(res => setTimeout(res, 500));
@@ -4938,82 +5029,274 @@ async function maybeShowArrivalBanner() {
     localStorage.setItem(STORAGE_KEY, String(Date.now()));
   };
 }
+// Run after first interaction so audio playback gesture is captured.
 maybeShowArrivalBanner();
 
-// ── Lightning Globe ────────────────────────────────────────────────
-const LG_HOME_LAT = 33.8303;
-const LG_HOME_LON = -116.5453;
-let LG_COAST_PATH = null;
-let LG_COAST_W = 0, LG_COAST_H = 0;
-function lgProject(lat, lon, w, h) {
-  return { x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h };
-}
-async function lgBuildCoastPath(w, h) {
-  if (LG_COAST_PATH && LG_COAST_W === w && LG_COAST_H === h) return LG_COAST_PATH;
-  try {
-    const r = await fetch('/coastlines.json');
-    if (!r.ok) return null;
-    const lines = await r.json();
-    const parts = [];
-    for (const line of lines) {
-      if (!line.length) continue;
-      let d = '';
-      for (let i = 0; i < line.length; i++) {
-        const lon = line[i][0], lat = line[i][1];
-        const x = ((lon + 180) / 360) * w;
-        const y = ((90 - lat) / 180) * h;
-        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+// ── Threat Globe ────────────────────────────────────────────────
+// GDELT 2.0 global terror / civil unrest tier — draggable special tile.
+// Source: /api/feeds/threat-global (server-side 15-min poll).
+// 4 modes: minimized | collapsed | default | expanded.
+// Position + mode persist in localStorage under 'tg-state'.
+function _tgInit(){
+  const TG_HOME_LAT = 33.8303;
+  const TG_HOME_LON = -116.5453;
+  const TG_STORAGE  = 'tg-state';
+  const TG_MODES    = ['minimized','collapsed','default','expanded'];
+
+  const root = document.getElementById('threat-globe');
+  if (!root) { setTimeout(_tgInit, 250); return; }
+  const header   = root.querySelector('.tg-header');
+  const tierPill = root.querySelector('#tg-tier-pill');
+  const tierBig  = root.querySelector('#tg-tier-big');
+  const scoreBig = root.querySelector('#tg-score-big');
+  const tierDesc = root.querySelector('#tg-tier-desc');
+  const driversEl= root.querySelector('#tg-drivers');
+  const eventsEl = root.querySelector('#tg-events');
+  const updatedEl= root.querySelector('#tg-updated');
+  const svgEl    = root.querySelector('#tg-map');
+  const pill     = root.querySelector('.tg-pill');
+
+  function tgProject(lat, lon, w, h) {
+    return { x: ((lon + 180) / 360) * w, y: ((90 - lat) / 180) * h };
+  }
+  let TG_COAST = null, TG_COAST_W = 0, TG_COAST_H = 0;
+  async function tgCoast(w, h) {
+    if (TG_COAST && TG_COAST_W === w && TG_COAST_H === h) return TG_COAST;
+    try {
+      const r = await fetch('/coastlines.json');
+      if (!r.ok) return null;
+      const lines = await r.json();
+      const parts = [];
+      for (const line of lines) {
+        if (!line.length) continue;
+        let d = '';
+        for (let i = 0; i < line.length; i++) {
+          const lon = line[i][0], lat = line[i][1];
+          const x = ((lon + 180) / 360) * w;
+          const y = ((90 - lat) / 180) * h;
+          d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1);
+        }
+        parts.push(d);
       }
-      parts.push(d);
+      TG_COAST = parts.join(' '); TG_COAST_W = w; TG_COAST_H = h;
+      return TG_COAST;
+    } catch { return null; }
+  }
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(TG_STORAGE) || '{}'); }
+    catch { return {}; }
+  }
+  function saveState(patch) {
+    const s = Object.assign(loadState(), patch);
+    localStorage.setItem(TG_STORAGE, JSON.stringify(s));
+  }
+  function setMode(mode) {
+    if (!TG_MODES.includes(mode)) mode = 'default';
+    root.setAttribute('data-mode', mode);
+    saveState({ mode });
+    // Re-render after a tick so dimensions settle
+    requestAnimationFrame(() => paintMap());
+  }
+  function setPos(x, y) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const w = root.offsetWidth  || 320;
+    const h = root.offsetHeight || 220;
+    x = Math.max(4, Math.min(x, W - w - 4));
+    y = Math.max(4, Math.min(y, H - h - 4));
+    root.style.left = x + 'px';
+    root.style.top  = y + 'px';
+    root.style.right = 'auto';
+    root.style.bottom = 'auto';
+    saveState({ x, y });
+  }
+
+  // Restore on load
+  const initial = loadState();
+  if (initial.mode && TG_MODES.includes(initial.mode)) {
+    root.setAttribute('data-mode', initial.mode);
+  }
+  if (typeof initial.x === 'number' && typeof initial.y === 'number') {
+    root.style.left = initial.x + 'px';
+    root.style.top  = initial.y + 'px';
+    root.style.right = 'auto';
+    root.style.bottom = 'auto';
+  }
+
+  // Drag (header is the handle; chrome buttons + pill exempted)
+  let dragStart = null;
+  function startDrag(e) {
+    if (e.target.closest('.tg-btn')) return;
+    const rect = root.getBoundingClientRect();
+    dragStart = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    root.classList.add('tg-dragging');
+    e.preventDefault();
+  }
+  header.addEventListener('mousedown', startDrag);
+  pill.addEventListener('mousedown', (e) => {
+    // Allow dragging the pill, but click (no movement) restores to default.
+    // Drag only arms after the cursor crosses a small threshold so micro-jitter
+    // from a click doesn't reposition the widget.
+    const rect = root.getBoundingClientRect();
+    dragStart = {
+      dx: e.clientX - rect.left, dy: e.clientY - rect.top,
+      fromPill: true, armed: false,
+      startX: e.clientX, startY: e.clientY,
+    };
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!dragStart) return;
+    if (dragStart.fromPill && !dragStart.armed) {
+      if (Math.abs(e.clientX - dragStart.startX) < 4 &&
+          Math.abs(e.clientY - dragStart.startY) < 4) return;
+      dragStart.armed = true;
+      root.classList.add('tg-dragging');
     }
-    LG_COAST_PATH = parts.join(' ');
-    LG_COAST_W = w; LG_COAST_H = h;
-    return LG_COAST_PATH;
-  } catch { return null; }
-}
-async function refreshLightningGlobe() {
-  const root = document.getElementById('lightning-globe');
-  if (!root) return;
-  try {
-    const r = await fetch('/api/feeds/lightning-global?seconds=600');
-    if (!r.ok) return;
-    const d = await r.json();
-    const strikes = d.items || [];
-    const w = root.clientWidth, h = root.clientHeight;
+    setPos(e.clientX - dragStart.dx, e.clientY - dragStart.dy);
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (!dragStart) return;
+    const wasPillClick = dragStart.fromPill && !dragStart.armed;
+    dragStart = null;
+    root.classList.remove('tg-dragging');
+    if (wasPillClick) setMode('default');
+  });
+
+  // Chrome buttons
+  root.querySelector('#tg-btn-min').onclick  = () => setMode('minimized');
+  root.querySelector('#tg-btn-coll').onclick = () => setMode('collapsed');
+  root.querySelector('#tg-btn-def').onclick  = () => setMode('default');
+  root.querySelector('#tg-btn-exp').onclick  = () => setMode('expanded');
+
+  // Data fetch + render
+  let lastData = null;
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function fmtAgo(ts) {
+    if (!ts) return '--';
+    const s = Math.max(0, Math.round(Date.now()/1000 - ts));
+    if (s < 60)   return s + 's';
+    if (s < 3600) return Math.round(s/60) + 'm';
+    return Math.round(s/3600) + 'h';
+  }
+  async function refresh() {
+    try {
+      const r = await fetch('/api/feeds/threat-global');
+      if (!r.ok) return;
+      lastData = await r.json();
+    } catch { return; }
+    paint();
+  }
+  function paint() {
+    if (!lastData) return;
+    const d = lastData;
+    const color = d.color || '#22c55e';
+    const isHot = (d.level === 'HIGH' || d.level === 'SEVERE');
+
+    tierPill.style.color = color;
+    tierPill.classList.toggle('tg-pulse', isHot);
+    tierPill.innerHTML = `<span class="tg-dot"></span>${d.level || 'LOADING'} · ${d.score || 0}`;
+
+    pill.style.color = color;
+    pill.classList.toggle('tg-pulse', isHot);
+    pill.innerHTML = `<span class="tg-dot"></span>THREAT · ${d.level || 'LOADING'} · ${d.score || 0}`;
+
+    const lastTs = (d.status && d.status.last_pull_ts) || null;
+    updatedEl.textContent = lastTs ? `UPD ${fmtAgo(lastTs)} ago` : 'AWAITING';
+
+    tierBig.textContent  = d.level || 'LOADING';
+    tierBig.style.color  = color;
+    scoreBig.textContent = `${d.score || 0}/100 · ${d.event_count || 0} events · ${d.source || 'GDELT'}`;
+    tierDesc.textContent = d.tier_desc || '';
+
+    driversEl.innerHTML = (d.drivers || []).map(s =>
+      `<li>${escapeHtml(s)}</li>`
+    ).join('') || '<li style="opacity:0.4">No high-weight events yet</li>';
+
+    eventsEl.innerHTML = (d.events || []).slice(0, 50).map(e => {
+      const loc = e.location || e.country || 'Unknown';
+      return `<li>
+        <span class="tg-evt-type tg-evt-${(e.type||'').toLowerCase()}">${escapeHtml(e.type||'')}</span>
+        <span class="tg-evt-loc">${escapeHtml(loc)}</span>
+        <span class="tg-evt-ago">${fmtAgo(e.ts)}</span>
+      </li>`;
+    }).join('') || '<li style="opacity:0.4">No events in window</li>';
+
+    paintMap();
+  }
+  async function paintMap() {
+    if (!lastData) return;
+    const w = svgEl.clientWidth, h = svgEl.clientHeight;
     if (!w || !h) return;
-    const home = lgProject(LG_HOME_LAT, LG_HOME_LON, w, h);
-    const newest = strikes.slice(0, 200);
-    let svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">`;
-    svg += `<line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>`;
-    svg += `<line x1="${w/2}" y1="0" x2="${w/2}" y2="${h}" stroke="rgba(255,255,255,0.05)" stroke-width="0.5"/>`;
-    const coast = await lgBuildCoastPath(w, h);
-    if (coast) svg += `<path class="lg-coast" d="${coast}"/>`;
-    for (let i = 0; i < newest.length; i++) {
-      const s = newest[i];
-      if (typeof s.lat !== 'number' || typeof s.lon !== 'number') continue;
-      const p = lgProject(s.lat, s.lon, w, h);
-      const delay = -(i * 0.04);
-      svg += `<circle class="lg-strike" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="1.8" style="animation-delay:${delay}s"/>`;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svgEl.setAttribute('preserveAspectRatio', 'none');
+
+    let svg = '';
+    svg += `<line x1="0" y1="${h/2}" x2="${w}" y2="${h/2}" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>`;
+    svg += `<line x1="${w/2}" y1="0" x2="${w/2}" y2="${h}" stroke="rgba(255,255,255,0.04)" stroke-width="0.5"/>`;
+    const coast = await tgCoast(w, h);
+    if (coast) svg += `<path class="tg-coast" d="${coast}"/>`;
+
+    const evts = (lastData.events || []).slice(0, 200);
+    for (const e of evts) {
+      if (typeof e.lat !== 'number' || typeof e.lon !== 'number') continue;
+      const p = tgProject(e.lat, e.lon, w, h);
+      const cls = 'tg-evt tg-evt-' + (e.type || '').toLowerCase();
+      const r = e.type === 'TERROR' ? 3.2 : (e.type === 'FIGHT' ? 2.6 : 2.0);
+      svg += `<circle class="${cls}" cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}"/>`;
     }
-    svg += `<circle class="lg-home-ring" cx="${home.x.toFixed(2)}" cy="${home.y.toFixed(2)}" r="2"/>`;
-    svg += `<circle class="lg-home"      cx="${home.x.toFixed(2)}" cy="${home.y.toFixed(2)}" r="2.2"/>`;
-    svg += `</svg>`;
-    root.innerHTML = `<div class="lg-header"><span>BLITZORTUNG · LAST 10m</span><span class="lg-count">${strikes.length} STRIKES</span></div>${svg}`;
-    if (strikes[0]) {
-      const last = strikes[0];
-      const ago = Math.round((Date.now()/1000 - last.ts));
-      root.title = `${strikes.length} strikes in last 10m · most recent ${ago}s ago at ${last.lat.toFixed(2)},${last.lon.toFixed(2)} (${last.distance_km}km from home)`;
-    }
-  } catch {}
+    const home = tgProject(TG_HOME_LAT, TG_HOME_LON, w, h);
+    svg += `<circle class="tg-home-pin" cx="${home.x.toFixed(1)}" cy="${home.y.toFixed(1)}" r="2.4"/>`;
+    svgEl.innerHTML = svg;
+  }
+
+  refresh();
+  setInterval(refresh, 60000);  // 60s frontend poll; backend caches to ~15min
+  if (window.ResizeObserver) {
+    new ResizeObserver(() => paintMap()).observe(svgEl);
+  }
 }
-refreshLightningGlobe();
-setInterval(refreshLightningGlobe, 15000);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _tgInit);
+} else {
+  _tgInit();
+}
 </script>
 
 <div id="threat-pulse"></div>
 <div id="operator-badge">OPERATOR · …</div>
 <div id="threat-tier-badge" onclick="if(typeof openAIPanel==='function') openAIPanel('brief')" title="Click for full briefing">THREAT · …</div>
-<div id="lightning-globe"></div>
+<div id="threat-globe" data-mode="default">
+  <div class="tg-header">
+    <span class="tg-title">GLOBAL THREAT</span>
+    <span class="tg-tier-pill" id="tg-tier-pill"><span class="tg-dot"></span>LOADING · 0</span>
+    <span class="tg-spacer"></span>
+    <span class="tg-updated" id="tg-updated">AWAITING</span>
+    <button class="tg-btn" id="tg-btn-min"  title="Minimize">_</button>
+    <button class="tg-btn" id="tg-btn-coll" title="Collapse">▬</button>
+    <button class="tg-btn" id="tg-btn-def"  title="Default">□</button>
+    <button class="tg-btn" id="tg-btn-exp"  title="Expand">▣</button>
+  </div>
+  <div class="tg-body">
+    <div class="tg-map-wrap"><svg class="tg-map" id="tg-map"></svg></div>
+    <div class="tg-side">
+      <div class="tg-score-block">
+        <div class="tg-tier-big" id="tg-tier-big">LOADING</div>
+        <div class="tg-score-big" id="tg-score-big">0/100</div>
+        <div class="tg-tier-desc" id="tg-tier-desc">Initializing GDELT 2.0 pull…</div>
+      </div>
+      <div class="tg-section-title">DRIVERS</div>
+      <ul class="tg-drivers" id="tg-drivers"></ul>
+      <div class="tg-section-title">RECENT EVENTS · LAST 24H</div>
+      <ul class="tg-events" id="tg-events"></ul>
+    </div>
+  </div>
+  <button class="tg-pill"><span class="tg-dot"></span>THREAT · LOADING · 0</button>
+</div>
+
 <div id="op-arrival-banner">
   <div class="opab-title">OPERATOR · ARRIVAL</div>
   <div class="opab-body">
@@ -5023,7 +5306,7 @@ setInterval(refreshLightningGlobe, 15000);
   <button class="opab-btn opab-play">▶ READ BRIEF</button>
   <button class="opab-btn opab-dismiss">DISMISS</button>
 </div>
-<div id="status-ticker"><div id="status-ticker-track">COMMAND CENTER · initializing telemetry...</div></div>
+<div id="status-ticker"><div id="status-ticker-track">PALM COMMAND · initializing telemetry...</div></div>
 
 </body>
 </html>
