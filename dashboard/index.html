@@ -1987,6 +1987,7 @@
     <button class="ai-tab"        id="tab-sentinel" onclick="switchAITab('sentinel')">SENTINEL</button>
     <button class="ai-tab"        id="tab-brief"    onclick="switchAITab('brief')">MORNING BRIEF</button>
     <button class="ai-tab"        id="tab-baseline" onclick="switchAITab('baseline')">BASELINE</button>
+    <button class="ai-tab"        id="tab-chalk"    onclick="switchAITab('chalk')">CHALK</button>
   </div>
   <div id="ai-body"></div>
 </div>
@@ -2920,6 +2921,7 @@ function switchAITab(tab) {
   else if (tab === 'sentinel') loadSentinel();
   else if (tab === 'brief')    loadMorningBrief();
   else if (tab === 'baseline') loadBaseline();
+  else if (tab === 'chalk')    loadChalk();
 }
 
 async function loadBaseline() {
