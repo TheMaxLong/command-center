@@ -1839,7 +1839,50 @@
       </div>
     </div>
 
-    <!-- TILES 3-6: Rotating public cams -->
+    <!-- TILES 3-5: Condo cams (Tapo C101, live via go2rtc) — added 2026-06-03 -->
+    <div class="tile personal">
+      <div class="tile-header" style="cursor:pointer" onclick="enterFullscreen('cloud_cam','LIVING RM · CLOUD CAM')">
+        <div class="tile-label">LIVING RM · CLOUD CAM</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="tile-meta">TAPO C101 · go2rtc</div>
+          <a class="monitor-btn" href="/monitor?cam=cloud_cam&mode=ann" onclick="event.stopPropagation(); openMonitor('cloud_cam','ann'); return false;" title="Open in monitor mode">⊞ MONITOR</a>
+        </div>
+      </div>
+      <div class="tile-body" style="position:relative;">
+        <iframe src="/go2rtc/stream.html?src=cloud_cam&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="tile-badge badge-live">LIVE</div>
+      </div>
+    </div>
+
+    <div class="tile personal">
+      <div class="tile-header" style="cursor:pointer" onclick="enterFullscreen('front_tv','LIVING RM · TOWARDS TV')">
+        <div class="tile-label">LIVING RM · TOWARDS TV</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="tile-meta">TAPO C101 · go2rtc</div>
+          <a class="monitor-btn" href="/monitor?cam=front_tv&mode=ann" onclick="event.stopPropagation(); openMonitor('front_tv','ann'); return false;" title="Open in monitor mode">⊞ MONITOR</a>
+        </div>
+      </div>
+      <div class="tile-body" style="position:relative;">
+        <iframe src="/go2rtc/stream.html?src=front_tv&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="tile-badge badge-live">LIVE</div>
+      </div>
+    </div>
+
+    <div class="tile personal">
+      <div class="tile-header" style="cursor:pointer" onclick="enterFullscreen('bedroom_corner','BEDROOM · CORNER')">
+        <div class="tile-label">BEDROOM · CORNER</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <div class="tile-meta">TAPO C101 · go2rtc</div>
+          <a class="monitor-btn" href="/monitor?cam=bedroom_corner&mode=ann" onclick="event.stopPropagation(); openMonitor('bedroom_corner','ann'); return false;" title="Open in monitor mode">⊞ MONITOR</a>
+        </div>
+      </div>
+      <div class="tile-body" style="position:relative;">
+        <iframe src="/go2rtc/stream.html?src=bedroom_corner&mode=mse,webrtc" allowfullscreen allow="autoplay; fullscreen"></iframe>
+        <div class="tile-badge badge-live">LIVE</div>
+      </div>
+    </div>
+
+    <!-- TILE 6: Single rotating public cam (engine capped to slot 0) -->
     <div class="tile" id="pub-tile-0">
       <div class="tile-header">
         <div class="tile-label" id="pub-label-0">---</div>
@@ -1858,69 +1901,6 @@
         <div class="cam-label-overlay" id="pub-loc-0"></div>
         <div class="tile-badge" id="pub-badge-0">HLS</div>
         <div class="rot-bar" id="rot-bar-0"></div>
-      </div>
-    </div>
-
-    <div class="tile" id="pub-tile-1">
-      <div class="tile-header">
-        <div class="tile-label" id="pub-label-1">---</div>
-        <div class="ch-controls">
-          <span class="tile-meta" id="pub-meta-1" style="margin-right:4px"></span>
-          <button class="ch-btn" onclick="advanceTile(1)">NEXT ▶</button>
-          <button class="ch-btn danger" onclick="hidePublicCam(1)" title="Hide this source">×</button>
-        </div>
-      </div>
-      <div class="tile-body">
-        <video class="cam-snap" id="pub-vid-1" autoplay muted playsinline style="display:none"></video>
-        <img   class="cam-snap" id="pub-img-1" style="display:none" alt="">
-        <iframe class="cam-snap" id="pub-frame-1" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
-        <div class="op-overlay" id="pub-op-1"></div>
-        <div class="op-scan"></div>
-        <div class="cam-label-overlay" id="pub-loc-1"></div>
-        <div class="tile-badge" id="pub-badge-1">HLS</div>
-        <div class="rot-bar" id="rot-bar-1"></div>
-      </div>
-    </div>
-
-    <div class="tile" id="pub-tile-2">
-      <div class="tile-header">
-        <div class="tile-label" id="pub-label-2">---</div>
-        <div class="ch-controls">
-          <span class="tile-meta" id="pub-meta-2" style="margin-right:4px"></span>
-          <button class="ch-btn" onclick="advanceTile(2)">NEXT ▶</button>
-          <button class="ch-btn danger" onclick="hidePublicCam(2)" title="Hide this source">×</button>
-        </div>
-      </div>
-      <div class="tile-body">
-        <video class="cam-snap" id="pub-vid-2" autoplay muted playsinline style="display:none"></video>
-        <img   class="cam-snap" id="pub-img-2" style="display:none" alt="">
-        <iframe class="cam-snap" id="pub-frame-2" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
-        <div class="op-overlay" id="pub-op-2"></div>
-        <div class="op-scan"></div>
-        <div class="cam-label-overlay" id="pub-loc-2"></div>
-        <div class="tile-badge" id="pub-badge-2">HLS</div>
-        <div class="rot-bar" id="rot-bar-2"></div>
-      </div>
-    </div>
-
-    <div class="tile" id="pub-tile-3">
-      <div class="tile-header">
-        <div class="tile-label" id="pub-label-3">---</div>
-        <div class="ch-controls">
-          <span class="tile-meta" id="pub-meta-3" style="margin-right:4px"></span>
-          <button class="ch-btn" onclick="advanceTile(3)">NEXT ▶</button>
-          <button class="ch-btn danger" onclick="hidePublicCam(3)" title="Hide this source">×</button>
-        </div>
-      </div>
-      <div class="tile-body">
-        <video class="cam-snap" id="pub-vid-3" autoplay muted playsinline style="display:none"></video>
-        <img   class="cam-snap" id="pub-img-3" style="display:none" alt="">
-        <iframe class="cam-snap" id="pub-frame-3" style="display:none" allowfullscreen allow="autoplay; fullscreen"></iframe>
-        <div class="op-overlay" id="pub-op-3"></div>
-        <div class="op-scan"></div>
-        <div class="cam-label-overlay" id="pub-loc-3"></div>
-        <div class="tile-badge" id="pub-badge-3">HLS</div>
-        <div class="rot-bar" id="rot-bar-3"></div>
       </div>
     </div>
 
@@ -2258,8 +2238,8 @@ function loadAngelcam(slot, embedUrl) {
 // ── STATE ────────────────────────────────────────────────────────
 let activeCity   = 'ps';
 let CAMS         = CITIES.ps.cams;
-const tileCount  = 4;
-const tileIndices = [0, 1, 2, 3];
+const tileCount  = 1;            // condo cams took slots 1-3; engine drives only slot 0 now (2026-06-03)
+const tileIndices = [0];
 const ROTATE_MS  = 35000;
 let autoRotate   = true;
 let rotateCount  = 0;
@@ -3263,6 +3243,102 @@ async function loadSentinel() {
   } catch (err) {
     body.innerHTML = '<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">SENTINEL DIGEST UNAVAILABLE · check ~/bin/sentinel-digest-sync.sh</div>';
   }
+}
+
+async function loadChalk() {
+  const body = document.getElementById('ai-body');
+  body.innerHTML = '<div style="color:var(--dim);padding:20px;letter-spacing:1px;font-size:9px;">LOADING CHALK...</div>';
+  try {
+    const res  = await fetch('/api/local/chalk');
+    const data = await res.json();
+    const auto   = data.auto   || [];
+    const manual = data.manual || [];
+    const total  = auto.length + manual.length;
+
+    let html = `<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+      <span style="font-size:8px;color:var(--cyan);letter-spacing:2px;">CHALK · LOAD-BEARING MEMORY</span>
+      <span style="font-size:8px;color:var(--dim);letter-spacing:1px;">${auto.length} AUTO · ${manual.length} MANUAL · ${total} TOTAL</span>
+    </div>`;
+
+    if (!total) {
+      html += '<div style="color:var(--dim);font-size:9px;padding:8px 0;">No pinned entries yet — tag memory files with LOAD-BEARING to auto-surface them here.</div>';
+      body.innerHTML = html;
+      return;
+    }
+
+    const renderCard = (pin) => {
+      const isAuto   = pin.type === 'auto';
+      const badgeClr = isAuto ? 'var(--cyan)' : 'var(--yellow)';
+      const badgeBg  = isAuto ? 'rgba(0,184,217,0.08)' : 'rgba(245,196,0,0.08)';
+      const badgeBdr = isAuto ? 'rgba(0,184,217,0.3)'  : 'rgba(245,196,0,0.3)';
+      const label    = isAuto ? 'AUTO' : 'MANUAL';
+      const title    = (pin.title || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const hook     = (pin.hook  || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const file     = (pin.file  || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const unpinBtn = !isAuto
+        ? `<button onclick="chalkUnpin(${JSON.stringify(pin.title)})"
+             style="background:transparent;border:1px solid rgba(255,59,59,0.3);color:var(--red);font-family:inherit;font-size:7px;padding:2px 6px;cursor:pointer;letter-spacing:1px;flex-shrink:0;">UNPIN</button>`
+        : '';
+      return `<div style="background:var(--panel);border:1px solid var(--border2);border-left:2px solid ${badgeClr};padding:10px 14px;margin-bottom:6px;display:flex;flex-direction:column;gap:5px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+          <span style="font-size:10px;color:var(--text);font-weight:500;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${title}</span>
+          <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+            <span style="font-size:7px;letter-spacing:1px;padding:1px 5px;border:1px solid ${badgeBdr};background:${badgeBg};color:${badgeClr};">${label}</span>
+            ${unpinBtn}
+          </div>
+        </div>
+        <div style="font-size:9px;color:var(--dim);line-height:1.5;">${hook}</div>
+        <div style="font-size:8px;color:rgba(61,81,102,0.8);letter-spacing:1px;">${file}</div>
+      </div>`;
+    };
+
+    if (auto.length) {
+      html += `<div style="font-size:8px;color:var(--cyan);letter-spacing:2px;margin-bottom:6px;margin-top:4px;">AUTO PINS · LOAD-BEARING DETECTED</div>`;
+      html += auto.map(renderCard).join('');
+    }
+    if (manual.length) {
+      html += `<div style="font-size:8px;color:var(--yellow);letter-spacing:2px;margin-bottom:6px;margin-top:${auto.length ? 14 : 4}px;">MANUAL PINS</div>`;
+      html += manual.map(renderCard).join('');
+    }
+
+    html += `<div style="margin-top:14px;border-top:1px solid var(--border2);padding-top:10px;font-size:8px;color:var(--dim);letter-spacing:1px;">
+      AUTO pins are detected from MEMORY.md entries tagged LOAD-BEARING.<br>
+      MANUAL pins: paste a memory title below.
+    </div>
+    <div style="margin-top:8px;display:flex;gap:6px;align-items:center;">
+      <input id="chalk-manual-input" placeholder="Memory title to pin..." style="flex:1;background:var(--panel);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:9px;padding:5px 8px;outline:none;letter-spacing:1px;">
+      <button onclick="chalkPin()" style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:inherit;font-size:8px;padding:5px 10px;cursor:pointer;letter-spacing:1px;white-space:nowrap;">+ PIN</button>
+    </div>`;
+
+    body.innerHTML = html;
+  } catch (err) {
+    body.innerHTML = `<div style="color:var(--red);padding:20px;font-size:9px;letter-spacing:1px;">CHALK UNAVAILABLE · ${err.message || err}</div>`;
+  }
+}
+
+async function chalkPin() {
+  const input = document.getElementById('chalk-manual-input');
+  const title = (input ? input.value : '').trim();
+  if (!title) return;
+  try {
+    await fetch('/api/local/chalk/pin', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title, hook: '(manual pin)', file: ''})
+    });
+    loadChalk();
+  } catch(e) { /* silent */ }
+}
+
+async function chalkUnpin(title) {
+  try {
+    await fetch('/api/local/chalk/unpin', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title})
+    });
+    loadChalk();
+  } catch(e) { /* silent */ }
 }
 
 async function loadProfiles() {
