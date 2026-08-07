@@ -65,7 +65,7 @@ plan_doc: docs/SIDE-ADDONS-PLAN-2026-05-20.md
 ## Things I deliberately did NOT touch
 
 - Wood-grain bezel v2 (Phase 0.4) — aesthetic call, your eyes
-- Anything on the facility side (CannaMax, FT, Pi, etc.) — out of scope for tonight
+- Anything on the facility side (Cannamax, FT, Pi, etc.) — out of scope for tonight
 - POI / face / retention values in any policy doc — drafted as DRAFT only
 - HARK Map node positions (just unblocked the JSON, didn't re-layout)
 - Shadowbroker — see "noticed but didn't touch" below
@@ -135,9 +135,9 @@ CLAUDE.md still asserts "All source lives in `~/palm-command/` and is synced to 
 
 ### ✅ Task #4 — Sentinel: auto-park cannamax watcher
 
-- **Problem:** `cannamax-endpoint-unreachable` digest noise since 18:45 because CannaMax isn't deployed anywhere reachable. URLs in script were placeholders ("Endpoint path TBD").
+- **Problem:** `cannamax-endpoint-unreachable` digest noise since 18:45 because Cannamax isn't deployed anywhere reachable. URLs in script were placeholders ("Endpoint path TBD").
 - **Fix:** `phone-infra/sentinel/watch-cannamax.sh` (in HARK-System-Map repo) now reads `~/sentinel/cannamax.url` (on Pixel 6). If file missing/empty → silent exit. No URL = no noise.
-- **To re-enable when CannaMax deploys:** `ssh pixel6 'echo "https://your-url/api/change-events?since=15m" > ~/sentinel/cannamax.url'`
+- **To re-enable when Cannamax deploys:** `ssh pixel6 'echo "https://your-url/api/change-events?since=15m" > ~/sentinel/cannamax.url'`
 - Watcher then polls the configured URL and resumes drift alerts.
 - **Verification:** ran on Pixel 6 with no URL file → exit 0, no digest entry.
 
